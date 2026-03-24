@@ -1,5 +1,9 @@
 HELP.md
 target/
+**/dns_real_profile/**
+dns_real_profile/
+dns_real_profile/**
+data/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
