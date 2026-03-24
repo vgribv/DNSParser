@@ -1,11 +1,17 @@
 package ru.vgribv.parser.entity;
 
 import jakarta.persistence.*;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
+
+import java.util.Objects;
 
 @Entity
 @Table(name = "tracker")
-@Data
+@Getter
+@Setter
+@ToString
 public class Tracker {
 
     public Tracker(){}
@@ -25,4 +31,15 @@ public class Tracker {
     private String name;
 
     private String link;
+
+    @Override
+    public boolean equals(Object o) {
+        if (!(o instanceof Tracker tracker)) return false;
+        return Objects.equals(id, tracker.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
+    }
 }

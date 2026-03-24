@@ -1,11 +1,17 @@
 package ru.vgribv.parser.entity;
 
 import jakarta.persistence.*;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
+
+import java.util.Objects;
 
 @Entity
 @Table(name = "search_filter")
-@Data
+@Getter
+@Setter
+@ToString
 public class SearchFilter {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -25,5 +31,16 @@ public class SearchFilter {
 
     public SearchFilter(long chatId) {
         this.chatId = chatId;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (!(o instanceof SearchFilter filter)) return false;
+        return Objects.equals(id, filter.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
     }
 }

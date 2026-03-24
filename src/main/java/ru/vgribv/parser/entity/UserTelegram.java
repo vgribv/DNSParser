@@ -1,11 +1,17 @@
 package ru.vgribv.parser.entity;
 
 import jakarta.persistence.*;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
+
+import java.util.Objects;
 
 @Entity
 @Table(name = "user_telegram")
-@Data
+@Getter
+@Setter
+@ToString
 public class UserTelegram {
 
     public UserTelegram(){}
@@ -24,4 +30,15 @@ public class UserTelegram {
 
     @Column(name = "is_active")
     private boolean isActive;
+
+    @Override
+    public boolean equals(Object o) {
+        if (!(o instanceof UserTelegram that)) return false;
+        return Objects.equals(id, that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
+    }
 }
