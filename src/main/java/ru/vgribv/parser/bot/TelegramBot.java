@@ -45,7 +45,6 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
     private final ProductRepository productRepository;
     private final TrackerRepository trackerRepository;
     private final UserTelegramRepository userTelegramRepository;
-    private final List<UserTelegram> userList;
     private final Map<Long, String> userState = new HashMap<>();
     private final Map<Long, Integer> userMessageIdTemp = new HashMap<>();
     private final Map<Long, DeleteMessage> userStateMessage = new HashMap<>();
@@ -65,7 +64,6 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
         this.productRepository = productRepository;
         this.trackerRepository = trackerRepository;
         this.userTelegramRepository = userTelegramRepository;
-        this.userList = new CopyOnWriteArrayList<>(userTelegramRepository.findAll());
         this.path = path;
         this.searchFilterRepository = searchFilterRepository;
         this.parserService = parserService;
@@ -174,16 +172,11 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
             }
 
             switch (messageText){
-                case "/start" -> {
-                    UserTelegram userTelegram = userTelegramRepository.findById(chatId).orElseGet(() -> {
-                        UserTelegram newUser = new UserTelegram(chatId);
-                        userList.add(newUser);
-                        return newUser;
-                    });
+                case "/start", "/menu" -> {
+                    UserTelegram userTelegram = userTelegramRepository.findByChatId(chatId).orElseGet(() -> new UserTelegram(chatId));
                     userTelegram.setActive(true);
                     userTelegramRepository.save(userTelegram);
                     menuReply(chatId);
-
                 }
                 case "Все товары" -> {
                     try {
