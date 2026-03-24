@@ -139,7 +139,6 @@ public class ParserService {
             System.out.println("Запуск браузера...");
             initBrowser();
             try {
-                //context.route("**/*.{png,jpg,jpeg,svg,webp,gif}", Route::abort);
                 Page page = context.pages().getFirst();
 
                 for (int i = 0; true; i++) {
@@ -258,7 +257,6 @@ public class ParserService {
                             Product product;
                             if (!productMap.containsKey(linkId)) {
                                 product = new Product(linkId, name, discountPrice, fullPrice, category, time);
-                                productMap.put(linkId, product);
                                 product.setCategory(category);
                             } else {
                                 product = productMap.get(linkId);
@@ -269,18 +267,10 @@ public class ParserService {
                                 product.setUpdatedAt(time);
                             }
                             productsToSave.add(product);
-                            System.out.println(product);
+//                            System.out.println(product);
                         }
                         Thread.sleep(random.nextInt(100, 500));
                     }
-                }
-
-
-                if (!uniqueCategoryMap.isEmpty()){
-                    categoryRepository.saveAllAndFlush(uniqueCategoryMap.values());
-                }
-                if (!productsToSave.isEmpty()){
-                    productRepository.saveAllAndFlush(productsToSave);
                 }
 
                 List<Product> newProducts = getNewProductList(productsToSave, productMap);
@@ -294,6 +284,13 @@ public class ParserService {
                     System.out.println("Парсинг успешно завершен.");
                 } catch (RuntimeException e){
                     System.err.println("Парсинг завершен, но пользователь не получил список товаров");
+                } finally {
+                    if (!uniqueCategoryMap.isEmpty()){
+                        categoryRepository.saveAllAndFlush(uniqueCategoryMap.values());
+                    }
+                    if (!productsToSave.isEmpty()){
+                        productRepository.saveAllAndFlush(productsToSave);
+                    }
                 }
             } catch (RuntimeException e){
                 throw new RuntimeException("Ошибка в блоке запуска браузера. ", e);
@@ -309,7 +306,6 @@ public class ParserService {
 
 
     public List<Product> getNewProductList(List<Product> productsToSave, Map<String, Product> productMap){
-
         List<Product> bufferNew = new ArrayList<>();
         for (Product product : productsToSave) {
             if (!productMap.containsKey(product.getLinkId())) {
@@ -326,6 +322,7 @@ public class ParserService {
         for (Product product: productsToSave){
             Product old =  productMap.get(product.getLinkId());
             if (old != null && old.getDiscountPrice() > product.getDiscountPrice()) {
+                product.setOldDiscountPrice(product.getDiscountPrice());
                 bufferPriceHasDecreased.add(product);
             }
         }
