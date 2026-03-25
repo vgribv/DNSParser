@@ -101,12 +101,12 @@ public class ParserService {
         }
     }
 
-    public boolean manualRun(){
+    public Optional<Boolean> manualRun() {
         if (running.compareAndSet(false, true)){
             self.executeAsync();
-            return true;
+            return Optional.of(true);
         }
-        return false;
+        return Optional.empty();
     }
 
     @Async
