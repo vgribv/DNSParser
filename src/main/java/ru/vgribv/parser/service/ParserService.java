@@ -7,15 +7,14 @@ import com.microsoft.playwright.options.WaitUntilState;
 import jakarta.annotation.PreDestroy;
 import jakarta.transaction.Transactional;
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.microsoft.playwright.*;
-import jakarta.annotation.PostConstruct;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Async;
@@ -26,7 +25,6 @@ import ru.vgribv.parser.entity.Category;
 import ru.vgribv.parser.entity.Product;
 import ru.vgribv.parser.repository.CategoryRepository;
 import ru.vgribv.parser.repository.ProductRepository;
-import ru.vgribv.parser.repository.UserTelegramRepository;
 import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.BrowserType;
 
@@ -39,6 +37,7 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @Service
+@Slf4j
 public class ParserService {
 
     private final ParserService self;
@@ -131,12 +130,12 @@ public class ParserService {
         try {
             Files.createDirectories(Paths.get("data"));
         } catch (IOException e) {
-            throw new RuntimeException("Не удалось создать папку. " + e);
+            throw new RuntimeException("Не удалось создать директорию \"data\"", e);
         }
         LocalDateTime time = LocalDateTime.now();
 
         try {
-            System.out.println("Запуск браузера...");
+            log.info("Запуск браузера...");
             initBrowser();
             try {
                 Page page = context.pages().getFirst();
@@ -150,7 +149,7 @@ public class ParserService {
                         page.waitForSelector(".product-buy__price");
                         break;
                     } catch (Exception e) {
-                        System.err.println("Попытка " + i + " не удалась: " + e.getMessage());
+                        log.error("Попытка {} не удалась: {}", i, e.getMessage(), e);
                         if (i == 2) throw new RuntimeException("Финальный провал", e);
                         Thread.sleep(1000);
                     }
@@ -164,13 +163,15 @@ public class ParserService {
                 );
                 String contentType = response3.headers().get("content-type");
                 if (response3.status() != 200 || contentType == null || !contentType.contains("application/json")) {
-                    System.err.println("⚠️ DNS вернул ошибку или HTML вместо данных. Статус: " + response3.status());
-                    throw new RuntimeException("Сессия устарела или сработала защита (Anti-ru.vgribv.dns.bot)");
+                    log.error("⚠️ DNS вернул ошибку или HTML вместо данных. Статус: {}. Тип контента: {}", response3.status(),  contentType);
+                    throw new RuntimeException("Неожиданный тип контента. Возможно, сработал анти-фрод");
                 }
 
                 String body = response3.text();
-                if (!body.trim().startsWith("{")) {
-                    throw new RuntimeException("Получен некорректный формат данных (вероятно, капча)");
+                if (body == null || body.isBlank() || !body.trim().startsWith("{")) {
+                    String snippet = (body != null && body.length() > 200) ? body.substring(0, 200) : body;
+                    log.error("⚠️ Получен некорректный ответ от DNS (не JSON). Фрагмент ответа: \n{}", snippet);
+                    throw new RuntimeException("⚠️ Получен некорректный формат данных (вероятно, капча)");
                 }
 
                 JsonObject root3 = JsonParser.parseString(body).getAsJsonObject();
@@ -219,8 +220,9 @@ public class ParserService {
                                         .setHeader("Referer", "https://www.dns-shop.ru"));
 
                         JsonObject jsonObject = JsonParser.parseString(response.text()).getAsJsonObject();
-                        if (!jsonObject.has("html") || jsonObject.get("html").isJsonNull()) {
-                            System.err.println("В категории " + category.getCategoryId() + " товаров нет.");
+                        if (!jsonObject.has("html") || jsonObject.get("html").isJsonNull() || jsonObject.get("html").getAsString().isBlank()) {
+                            log.warn("В категории '{}' (ID: {}) товары не найдены. Пропускаю...",
+                                    category.getName(), category.getCategoryId());
                             break;
                         }
                         String realHtml = jsonObject.get("html").getAsString();
@@ -267,7 +269,6 @@ public class ParserService {
                                 product.setUpdatedAt(time);
                             }
                             productsToSave.add(product);
-//                            System.out.println(product);
                         }
                         Thread.sleep(random.nextInt(100, 500));
                     }
@@ -281,9 +282,9 @@ public class ParserService {
                 fileWriteService.writeFile(newProducts, priceHasDecreased, deletedProducts);
                 try {
                     sendToUserService.sendGoodsToUser(newProducts, priceHasDecreased, deletedProducts);
-                    System.out.println("Парсинг успешно завершен.");
+                    log.info("Парсинг успешно завершен");
                 } catch (RuntimeException e){
-                    System.err.println("Парсинг завершен, но пользователь не получил список товаров");
+                    log.error("Парсинг завершен, но произошла ошибка при рассылке пользователям. {}", e.getMessage(), e);
                 } finally {
                     if (!uniqueCategoryMap.isEmpty()){
                         categoryRepository.saveAllAndFlush(uniqueCategoryMap.values());
@@ -293,12 +294,12 @@ public class ParserService {
                     }
                 }
             } catch (RuntimeException e){
-                throw new RuntimeException("Ошибка в блоке запуска браузера. ", e);
+                throw new RuntimeException("Ошибка в блоке запуска браузера", e);
             }
         } catch (RuntimeException e) {
-            throw new RuntimeException("Парсинг прерван из-за ошибки: ", e);
+            throw new RuntimeException("Парсинг прерван из-за ошибки", e);
         } catch (Exception e) {
-            throw new RuntimeException("Критическая системная ошибка: ", e);
+            throw new RuntimeException("Критическая системная ошибка", e);
         } finally {
             closeBrowser();
         }
