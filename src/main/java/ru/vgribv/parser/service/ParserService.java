@@ -55,9 +55,9 @@ public class ParserService {
     private final Path userDataDir = Paths.get("dns_real_profile");
 
 
-    public ParserService (@Lazy ParserService self, ApplicationEventPublisher publisher,
-                          ProductRepository productRepository, CategoryRepository categoryRepository,
-                          FileWriteService fileWriteService, @Lazy SendToUserService sendToUserService) {
+    public ParserService(@Lazy ParserService self, ApplicationEventPublisher publisher,
+                         ProductRepository productRepository, CategoryRepository categoryRepository,
+                         FileWriteService fileWriteService, @Lazy SendToUserService sendToUserService) {
         this.self = self;
         this.publisher = publisher;
         this.productRepository = productRepository;
@@ -66,7 +66,7 @@ public class ParserService {
         this.sendToUserService = sendToUserService;
     }
 
-    private void initBrowser(){
+    private void initBrowser() {
         this.playwright = Playwright.create();
         this.context = playwright.chromium().launchPersistentContext(userDataDir, new BrowserType.LaunchPersistentContextOptions()
                 .setHeadless(false)
@@ -81,28 +81,29 @@ public class ParserService {
                 .setViewportSize(1280, 720));
     }
 
-    private void closeBrowser(){
-        if (this.context != null)
+    private void closeBrowser() {
+        if (this.context != null) {
             context.close();
-        if (this.playwright != null){
+        }
+        if (this.playwright != null) {
             playwright.close();
         }
     }
 
     @PreDestroy
-    public void cleanup(){
+    public void cleanup() {
         closeBrowser();
     }
 
     @Scheduled(cron = "0 0 8-20 * * *")
-    public void scheduledRun(){
-        if (running.compareAndSet(false, true)){
+    public void scheduledRun() {
+        if (running.compareAndSet(false, true)) {
             self.executeAsync();
         }
     }
 
     public Optional<Boolean> manualRun() {
-        if (running.compareAndSet(false, true)){
+        if (running.compareAndSet(false, true)) {
             self.executeAsync();
             return Optional.of(true);
         }
@@ -110,12 +111,11 @@ public class ParserService {
     }
 
     @Async
-    @Transactional
-    public void executeAsync(){
+    public void executeAsync() {
         try {
             parseGoods();
             publisher.publishEvent(new ParsingResultEvent(true, "✅ Парсинг успешно завершен."));
-        } catch (Exception e){
+        } catch (Exception e) {
             publisher.publishEvent(new ParsingResultEvent(false, "❌ Парсинг завершен с ошибкой."));
             throw new RuntimeException(e);
         } finally {
@@ -123,9 +123,7 @@ public class ParserService {
         }
     }
 
-
-
-    private void parseGoods(){
+    private void parseGoods() {
 
         try {
             Files.createDirectories(Paths.get("data"));
@@ -135,169 +133,168 @@ public class ParserService {
         LocalDateTime time = LocalDateTime.now();
 
         try {
-            log.info("Запуск браузера...");
+            log.info("Этап 1: Запуск браузера...");
             initBrowser();
-            try {
-                Page page = context.pages().getFirst();
 
-                for (int i = 0; true; i++) {
-                    try {
-                        page.navigate("https://www.dns-shop.ru/catalog/markdown/?p=1",
-                                new Page.NavigateOptions()
-                                        .setWaitUntil(WaitUntilState.DOMCONTENTLOADED)
-                                        .setTimeout(60000));
-                        page.waitForSelector(".product-buy__price");
-                        break;
-                    } catch (Exception e) {
-                        log.error("Попытка {} не удалась: {}", i, e.getMessage(), e);
-                        if (i == 2) throw new RuntimeException("Финальный провал", e);
-                        Thread.sleep(1000);
-                    }
-                }
-
-                APIRequestContext request = context.request();
-                APIResponse response3 = request.get("https://www.dns-shop.ru/catalogMarkdown/markdown/products-filters/",
-                        RequestOptions.create()
-                                .setHeader("X-Requested-With", "XMLHttpRequest")
-                                .setHeader("Referer", "https://www.dns-shop.ru")
-                );
-                String contentType = response3.headers().get("content-type");
-                if (response3.status() != 200 || contentType == null || !contentType.contains("application/json")) {
-                    log.error("⚠️ DNS вернул ошибку или HTML вместо данных. Статус: {}. Тип контента: {}", response3.status(),  contentType);
-                    throw new RuntimeException("Неожиданный тип контента. Возможно, сработал анти-фрод");
-                }
-
-                String body = response3.text();
-                if (body == null || body.isBlank() || !body.trim().startsWith("{")) {
-                    String snippet = (body != null && body.length() > 200) ? body.substring(0, 200) : body;
-                    log.error("⚠️ Получен некорректный ответ от DNS (не JSON). Фрагмент ответа: \n{}", snippet);
-                    throw new RuntimeException("⚠️ Получен некорректный формат данных (вероятно, капча)");
-                }
-
-                JsonObject root3 = JsonParser.parseString(body).getAsJsonObject();
-                JsonArray states3 = root3.getAsJsonObject("data")
-                        .getAsJsonObject("blocks")
-                        .getAsJsonArray("left").get(1).getAsJsonObject()
-                        .getAsJsonArray("variants");
-
-                Iterable<Category> allCategories = categoryRepository.findAll();
-                Map<String, Category> categoryMap = new HashMap<>();
-                Map<String, Category> uniqueCategoryMap = new HashMap<>();
-                for (Category category : allCategories) {
-                    categoryMap.put(category.getCategoryId(), category);
-                }
-
-                Iterable<Product> allProducts = productRepository.findAll();
-                Map<String, Product> productMap = new HashMap<>();
-                for (Product product : allProducts) {
-                    productMap.put(product.getLinkId(), product);
-                }
-                List<Product> productsToSave = new ArrayList<>();
-                Random random = new Random();
-
-                for (JsonElement element1 : states3) {
-                    JsonObject item1 = element1.getAsJsonObject();
-                    JsonObject itemData1 = item1.getAsJsonObject();
-                    String categoryId = itemData1.get("id").getAsString();
-                    Category category;
-                    if (categoryMap.containsKey(categoryId)) {
-                        category = categoryMap.get(categoryId);
-                    } else if (uniqueCategoryMap.containsKey(categoryId)) {
-                        category = uniqueCategoryMap.get(categoryId);
-                    } else {
-                        category = new Category();
-                        category.setCategoryId(categoryId);
-                        category.setName(itemData1.get("label").getAsString());
-                        uniqueCategoryMap.put(categoryId, category);
-                    }
-
-                    int currentPage = 1;
-                    boolean flag = false;
-                    while (!flag && currentPage < 100) {
-                        APIResponse response = request.get("https://www.dns-shop.ru/catalog/markdown/?category=" + category.getCategoryId() + "&p=" + currentPage++,
-                                RequestOptions.create()
-                                        .setHeader("X-Requested-With", "XMLHttpRequest")
-                                        .setHeader("Referer", "https://www.dns-shop.ru"));
-
-                        JsonObject jsonObject = JsonParser.parseString(response.text()).getAsJsonObject();
-                        if (!jsonObject.has("html") || jsonObject.get("html").isJsonNull() || jsonObject.get("html").getAsString().isBlank()) {
-                            log.warn("В категории '{}' (ID: {}) товары не найдены. Пропускаю...",
-                                    category.getName(), category.getCategoryId());
-                            break;
-                        }
-                        String realHtml = jsonObject.get("html").getAsString();
-                        Document document = Jsoup.parse(realHtml);
-
-                        if (!hasNextPage(document)) flag = true;
-
-                        String req = buildPriceRequest(realHtml);
-                        String csrfToken = getToken(context.pages().getFirst());
-
-                        APIResponse response2 = context.request().post("https://www.dns-shop.ru/ajax-state/product-buy/",
-                                RequestOptions.create()
-                                        .setHeader("Content-Type", "application/x-www-form-urlencoded")
-                                        .setHeader("x-csrf-token", csrfToken)
-                                        .setHeader("x-requested-with", "XMLHttpRequest")
-                                        .setHeader("referer", "https://www.dns-shop.ru")
-                                        .setData("data=" + req));
-
-                        JsonObject root = JsonParser.parseString(response2.text()).getAsJsonObject();
-                        JsonArray states = root.getAsJsonObject("data").getAsJsonArray("states");
-
-                        for (JsonElement element : states) {
-                            JsonObject item = element.getAsJsonObject();
-                            JsonObject itemData = item.getAsJsonObject("data");
-
-                            String linkId = itemData.get("id").getAsString();
-                            String name = itemData.get("name").getAsString();
-                            int discountPrice = itemData.getAsJsonObject("price").get("current").getAsInt();
-                            int fullPrice = 0;
-                            JsonElement fullPriceJson = itemData.getAsJsonObject("price").get("previous");
-                            if (fullPriceJson != null) {
-                                fullPrice = fullPriceJson.getAsInt();
-                            }
-                            Product product;
-                            if (!productMap.containsKey(linkId)) {
-                                product = new Product(linkId, name, discountPrice, fullPrice, category, time);
-                                product.setCategory(category);
-                            } else {
-                                product = productMap.get(linkId);
-                                product.setName(name);
-                                product.setDiscountPrice(discountPrice);
-                                product.setFullPrice(fullPrice);
-                                product.setCategory(category);
-                                product.setUpdatedAt(time);
-                            }
-                            productsToSave.add(product);
-                        }
-                        Thread.sleep(random.nextInt(100, 500));
-                    }
-                }
-
-                List<Product> newProducts = getNewProductList(productsToSave, productMap);
-                List<Product> priceHasDecreased = getProductListWherePriceHasDecreased(productsToSave, productMap);
-                List<Product> deletedProducts = productRepository.findAllByUpdatedAtBefore(time);
-
-                productRepository.deleteByUpdatedAtBefore(time);
-                fileWriteService.writeFile(newProducts, priceHasDecreased, deletedProducts);
+            log.info("Этап 2: Загрузка главной страницы...");
+            Page page = context.pages().getFirst();
+            for (int i = 0; true; i++) {
                 try {
-                    sendToUserService.sendGoodsToUser(newProducts, priceHasDecreased, deletedProducts);
-                    log.info("Парсинг успешно завершен");
-                } catch (RuntimeException e){
-                    log.error("Парсинг завершен, но произошла ошибка при рассылке пользователям. {}", e.getMessage(), e);
-                } finally {
-                    if (!uniqueCategoryMap.isEmpty()){
-                        categoryRepository.saveAllAndFlush(uniqueCategoryMap.values());
-                    }
-                    if (!productsToSave.isEmpty()){
-                        productRepository.saveAllAndFlush(productsToSave);
-                    }
+                    page.navigate("https://www.dns-shop.ru/catalog/markdown/?p=1",
+                            new Page.NavigateOptions()
+                                    .setWaitUntil(WaitUntilState.DOMCONTENTLOADED)
+                                    .setTimeout(60000));
+                    page.waitForSelector(".product-buy__price");
+                    break;
+                } catch (Exception e) {
+                    log.error("Попытка {} не удалась: {}", i, e.getMessage(), e);
+                    if (i == 2) throw new RuntimeException("Финальный провал", e);
+                    Thread.sleep(1000);
                 }
-            } catch (RuntimeException e){
-                throw new RuntimeException("Ошибка в блоке запуска браузера", e);
             }
-        } catch (RuntimeException e) {
-            throw new RuntimeException("Парсинг прерван из-за ошибки", e);
+
+            APIRequestContext request = context.request();
+            APIResponse response3 = request.get("https://www.dns-shop.ru/catalogMarkdown/markdown/products-filters/",
+                    RequestOptions.create()
+                            .setHeader("X-Requested-With", "XMLHttpRequest")
+                            .setHeader("Referer", "https://www.dns-shop.ru")
+            );
+            String contentType = response3.headers().get("content-type");
+            if (response3.status() != 200 || contentType == null || !contentType.contains("application/json")) {
+                log.error("⚠️ DNS вернул ошибку или HTML вместо данных. Статус: {}. Тип контента: {}", response3.status(), contentType);
+                throw new RuntimeException("Неожиданный тип контента. Возможно, сработал анти-фрод");
+            }
+
+            String body = response3.text();
+            if (body == null || body.isBlank() || !body.trim().startsWith("{")) {
+                String snippet = (body != null && body.length() > 200) ? body.substring(0, 200) : body;
+                log.error("⚠️ Получен некорректный ответ от DNS (не JSON). Фрагмент ответа: \n{}", snippet);
+                throw new RuntimeException("⚠️ Получен некорректный формат данных (вероятно, капча)");
+            }
+
+            JsonObject root3 = JsonParser.parseString(body).getAsJsonObject();
+            JsonArray states3 = root3.getAsJsonObject("data")
+                    .getAsJsonObject("blocks")
+                    .getAsJsonArray("left").get(1).getAsJsonObject()
+                    .getAsJsonArray("variants");
+
+            Iterable<Category> allCategories = categoryRepository.findAll();
+            Map<String, Category> categoryMap = new HashMap<>();
+            Map<String, Category> uniqueCategoryMap = new HashMap<>();
+            for (Category category : allCategories) {
+                categoryMap.put(category.getCategoryId(), category);
+            }
+
+            Iterable<Product> allProducts = productRepository.findAll();
+            Map<String, Product> productMap = new HashMap<>();
+            for (Product product : allProducts) {
+                productMap.put(product.getLinkId(), product);
+            }
+            List<Product> productsToSave = new ArrayList<>();
+            Random random = new Random();
+
+            log.info("Этап 3: Сбор информации о товарах...");
+
+            for (JsonElement element1 : states3) {
+                JsonObject item1 = element1.getAsJsonObject();
+                JsonObject itemData1 = item1.getAsJsonObject();
+                String categoryId = itemData1.get("id").getAsString();
+                Category category;
+                if (categoryMap.containsKey(categoryId)) {
+                    category = categoryMap.get(categoryId);
+                } else if (uniqueCategoryMap.containsKey(categoryId)) {
+                    category = uniqueCategoryMap.get(categoryId);
+                } else {
+                    category = new Category();
+                    category.setCategoryId(categoryId);
+                    category.setName(itemData1.get("label").getAsString());
+                    uniqueCategoryMap.put(categoryId, category);
+                }
+
+                int currentPage = 1;
+                boolean flag = false;
+                while (!flag && currentPage < 100) {
+                    APIResponse response = request.get("https://www.dns-shop.ru/catalog/markdown/?category=" + category.getCategoryId() + "&p=" + currentPage++,
+                            RequestOptions.create()
+                                    .setHeader("X-Requested-With", "XMLHttpRequest")
+                                    .setHeader("Referer", "https://www.dns-shop.ru"));
+
+                    showProgress(category.getName(), currentPage);
+
+                    JsonObject jsonObject = JsonParser.parseString(response.text()).getAsJsonObject();
+                    if (!jsonObject.has("html") || jsonObject.get("html").isJsonNull() || jsonObject.get("html").getAsString().isBlank()) {
+                        log.warn("В категории '{}' (ID: {}) товары не найдены. Пропускаю...",
+                                category.getName(), category.getCategoryId());
+                        break;
+                    }
+                    String realHtml = jsonObject.get("html").getAsString();
+                    Document document = Jsoup.parse(realHtml);
+
+                    if (!hasNextPage(document)) flag = true;
+
+                    String req = buildPriceRequest(realHtml);
+                    String csrfToken = getToken(context.pages().getFirst());
+
+                    APIResponse response2 = context.request().post("https://www.dns-shop.ru/ajax-state/product-buy/",
+                            RequestOptions.create()
+                                    .setHeader("Content-Type", "application/x-www-form-urlencoded")
+                                    .setHeader("x-csrf-token", csrfToken)
+                                    .setHeader("x-requested-with", "XMLHttpRequest")
+                                    .setHeader("referer", "https://www.dns-shop.ru")
+                                    .setData("data=" + req));
+
+                    JsonObject root = JsonParser.parseString(response2.text()).getAsJsonObject();
+                    JsonArray states = root.getAsJsonObject("data").getAsJsonArray("states");
+
+                    for (JsonElement element : states) {
+                        JsonObject item = element.getAsJsonObject();
+                        JsonObject itemData = item.getAsJsonObject("data");
+
+                        String linkId = itemData.get("id").getAsString();
+                        String name = itemData.get("name").getAsString();
+                        int discountPrice = itemData.getAsJsonObject("price").get("current").getAsInt();
+                        int fullPrice = 0;
+                        JsonElement fullPriceJson = itemData.getAsJsonObject("price").get("previous");
+                        if (fullPriceJson != null) {
+                            fullPrice = fullPriceJson.getAsInt();
+                        }
+                        Product product;
+                        if (!productMap.containsKey(linkId)) {
+                            product = new Product(linkId, name, discountPrice, fullPrice, category, time);
+                            product.setCategory(category);
+                        } else {
+                            product = productMap.get(linkId);
+                            product.setName(name);
+                            product.setDiscountPrice(discountPrice);
+                            product.setFullPrice(fullPrice);
+                            product.setCategory(category);
+                            product.setUpdatedAt(time);
+                        }
+                        productsToSave.add(product);
+                    }
+                    Thread.sleep(random.nextInt(100, 500));
+                }
+            }
+
+            log.info("Этап 4: Сохранение результатов и рассылка...");
+
+            List<Product> newProducts = getNewProductList(productsToSave, productMap);
+            List<Product> priceHasDecreased = getProductListWherePriceHasDecreased(productsToSave, productMap);
+            List<Product> deletedProducts = productRepository.findAllByUpdatedAtBefore(time);
+
+            self.saveParsedData(time, uniqueCategoryMap, productsToSave);
+
+            try {
+                fileWriteService.writeFile(newProducts, priceHasDecreased, deletedProducts);
+            } catch (Exception e) {
+                log.error("Ошибка записи в файл: ", e);
+            }
+            try {
+                sendToUserService.sendGoodsToUser(newProducts, priceHasDecreased, deletedProducts);
+                log.info("Парсинг и рассылка успешно завершены");
+            } catch (Exception e) {
+                log.error("Парсинг завершен, но произошла ошибка при рассылке пользователям. {}", e.getMessage(), e);
+            }
         } catch (Exception e) {
             throw new RuntimeException("Критическая системная ошибка", e);
         } finally {
@@ -305,8 +302,19 @@ public class ParserService {
         }
     }
 
+    @Transactional
+    public void saveParsedData(LocalDateTime time, Map<String, Category> uniqueCategoryMap, List<Product> productsToSave) {
 
-    public List<Product> getNewProductList(List<Product> productsToSave, Map<String, Product> productMap){
+        if (!uniqueCategoryMap.isEmpty()) {
+            categoryRepository.saveAllAndFlush(uniqueCategoryMap.values());
+        }
+        if (!productsToSave.isEmpty()) {
+            productRepository.saveAllAndFlush(productsToSave);
+        }
+        productRepository.deleteByUpdatedAtBefore(time);
+    }
+
+    private List<Product> getNewProductList(List<Product> productsToSave, Map<String, Product> productMap) {
         List<Product> bufferNew = new ArrayList<>();
         for (Product product : productsToSave) {
             if (!productMap.containsKey(product.getLinkId())) {
@@ -316,21 +324,21 @@ public class ParserService {
         return bufferNew;
     }
 
-    public List<Product> getProductListWherePriceHasDecreased(List<Product> productsToSave, Map<String, Product> productMap) {
+    private List<Product> getProductListWherePriceHasDecreased(List<Product> productsToSave, Map<String, Product> productMap) {
 
         List<Product> bufferPriceHasDecreased = new ArrayList<>();
 
-        for (Product product: productsToSave){
-            Product old =  productMap.get(product.getLinkId());
+        for (Product product : productsToSave) {
+            Product old = productMap.get(product.getLinkId());
             if (old != null && old.getDiscountPrice() > product.getDiscountPrice()) {
-                product.setOldDiscountPrice(product.getDiscountPrice());
+                product.setOldDiscountPrice(old.getDiscountPrice());
                 bufferPriceHasDecreased.add(product);
             }
         }
         return bufferPriceHasDecreased;
     }
 
-    public String getToken(Page page) {
+    private String getToken(Page page) {
         String csrfToken = (String) page.evaluate("() => document.querySelector('meta[name=\"csrf-token\"]').content");
 
         if (csrfToken == null || csrfToken.isEmpty())
@@ -339,7 +347,7 @@ public class ParserService {
         return csrfToken;
     }
 
-    public String buildPriceRequest(String html) {
+    private String buildPriceRequest(String html) {
         Document doc = Jsoup.parse(html);
         Elements cards = doc.select(".catalog-product");
 
@@ -372,9 +380,14 @@ public class ParserService {
         return reqRoot.toString();
     }
 
-    public boolean hasNextPage(Document doc) {
+    private boolean hasNextPage(Document doc) {
         Element nextButton = doc.selectFirst(".pagination-widget__page-link_next:not(.pagination-widget__page-link_disabled)");
         return nextButton != null;
+    }
+
+    private void showProgress(String categoryName, int currentPage) {
+        String text = String.format("\r⏳ Категория: %-20s | Страница: %d", categoryName, currentPage);
+        System.out.print(text);
     }
 
 }
