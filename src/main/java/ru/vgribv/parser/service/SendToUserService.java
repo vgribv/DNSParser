@@ -4,10 +4,8 @@ import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
 import ru.vgribv.parser.bot.TelegramBot;
 import ru.vgribv.parser.entity.*;
-import ru.vgribv.parser.repository.ProductRepository;
 import ru.vgribv.parser.repository.SearchFilterRepository;
 import ru.vgribv.parser.repository.TrackerRepository;
-import ru.vgribv.parser.repository.UserTelegramRepository;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -131,17 +129,16 @@ public class SendToUserService {
         }
     }
 
-    private void checkAndAdd(List<SearchFilter> filters, Map<Product, String> preparedProductName, Map<SearchFilter, String> preparedKeywords, Map<String, Product> productsMap, Map<Long, List<Product>> outputProductsFilterMap) {
-        System.out.println("Запуск checkAndAdd. Товаров в обработке: " + productsMap.size());
+    private void checkAndAdd(List<SearchFilter> filters, Map<Product, String> preparedProductName,
+                             Map<SearchFilter, String> preparedKeywords, Map<String, Product> productsMap,
+                             Map<Long, List<Product>> outputProductsFilterMap) {
         for (Product product: productsMap.values()) {
             String productName = preparedProductName.get(product);
-            System.out.println("Обработка товара: " + product.getName() + " (подготовленное имя: " + productName + ")");
             for (SearchFilter filter: filters){
                 String filterKeyword =  preparedKeywords.get(filter);
                 if (matchesFilter(product, productName, filter, filterKeyword)){
                     Long chatId = filter.getChatId();
                     outputProductsFilterMap.computeIfAbsent(chatId, _ -> new ArrayList<>()).add(product);
-                    System.out.println("Товар подошел!");
                 }
             }
         }
@@ -156,21 +153,18 @@ public class SendToUserService {
 
 
     private boolean matchesFilter(Product product, String productName, SearchFilter filter,  String filterKeyword) {
-        int filterMaxPrice = filter.getMaxPrice();
-        System.out.println("filterMaxPrice: " + filterMaxPrice);
-        if (filterMaxPrice > 0 &&  product.getDiscountPrice() > filterMaxPrice) {
+        if (Optional.ofNullable(filter.getMaxPrice()).
+        filter(max -> max > 0 && product.getDiscountPrice() > max).isPresent()){
             return false;
         }
 
         String filterCategory = filter.getCategory();
-        System.out.println("filterCategory: " + filterCategory);
         if (filterCategory != null && !filterCategory.isBlank()) {
             Category productCategory = product.getCategory();
             if (productCategory == null || !productCategory.getName().equalsIgnoreCase(filterCategory)) {
                 return false;
             }
         }
-        System.out.println("filterKeyword: " + filterKeyword);
         if (filterKeyword != null && !filterKeyword.isBlank()) {
             return productName != null && productName.contains(filterKeyword);
         }
