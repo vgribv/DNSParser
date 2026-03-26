@@ -11,6 +11,7 @@ import ru.vgribv.parser.entity.Tracker;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 public class KeyboardFactory {
 
@@ -29,15 +30,18 @@ public class KeyboardFactory {
                 .build();
     }
 
-    public static InlineKeyboardMarkup getFiltersMenu(int currentPage , List<SearchFilter> searchFilterlist) {
+    public static InlineKeyboardMarkup getFiltersMenu(int currentPage, List<SearchFilter> searchFilterlist) {
         List<InlineKeyboardRow> rows = new ArrayList<>();
         int pageSize = 6;
         int start = pageSize * currentPage;
         int end = Math.min(start + pageSize, searchFilterlist.size());
         List<SearchFilter> filters = searchFilterlist.subList(start, end);
-        for (SearchFilter filter: filters){
+        for (SearchFilter filter : filters) {
+            String keyword = formatField(filter.getKeyword(), "Без названия", "");
+            String category = formatField(filter.getCategory(), "Все категории", "");
+            String price = formatField(filter.getMaxPrice(), "Без лимита", "₽");
             InlineKeyboardButton btn = InlineKeyboardButton.builder()
-                    .text("⚙️ " + filter.getKeyword() + " | " + filter.getCategory() + " | " + filter.getMaxPrice())
+                    .text("⚙️ " + keyword + " | " + category + " | " + price)
                     .callbackData("editFilter_" + filter.getId())
                     .build();
             rows.add(new InlineKeyboardRow(btn));
@@ -59,13 +63,13 @@ public class KeyboardFactory {
 
     }
 
-    public static InlineKeyboardMarkup getTrackersMenu(int currentPage, List<Tracker> trackerList){
+    public static InlineKeyboardMarkup getTrackersMenu(int currentPage, List<Tracker> trackerList) {
         List<InlineKeyboardRow> rows = new ArrayList<>();
         int pageSize = 6;
         int start = pageSize * currentPage;
         int end = Math.min(start + pageSize, trackerList.size());
         List<Tracker> trackers = trackerList.subList(start, end);
-        for (Tracker tracker: trackers){
+        for (Tracker tracker : trackers) {
             InlineKeyboardButton btn = InlineKeyboardButton.builder()
                     .text("\uD83D\uDCE6 " + tracker.getName())
                     .callbackData("editTracker_" + tracker.getLink())
@@ -88,24 +92,30 @@ public class KeyboardFactory {
         return InlineKeyboardMarkup.builder().keyboard(rows).build();
     }
 
-    public static InlineKeyboardMarkup setFilterMenu() {
+    public static InlineKeyboardMarkup inputFilterValue() {
         return InlineKeyboardMarkup.builder()
                 .keyboard(List.of(
-                        new InlineKeyboardRow(InlineButton.SET_FILTER_WORD.build()),
-                        new InlineKeyboardRow(InlineButton.SET_FILTER_CATEGORY.build()),
-                        new InlineKeyboardRow(InlineButton.SET_FILTER_PRICE.build()),
-                        new InlineKeyboardRow(InlineButton.SAVE_FILTER.build())
-                ))
-                .build();
+                        new InlineKeyboardRow(InlineButton.CANCEL.build())
+                )).build();
     }
 
-    public static InlineKeyboardMarkup editFilterMenu(Long filterId) {
+    public static InlineKeyboardMarkup editFilterMenu(SearchFilter searchFilter, boolean isEdit) {
+        InlineKeyboardRow inlineKeyboardRow;
+        if (isEdit) {
+            inlineKeyboardRow = new InlineKeyboardRow(InlineButton.SAVE_EDIT_FILTER.build(),
+                    InlineKeyboardButton.builder().text("Удалить").callbackData("deleteFilter_" + searchFilter.getId()).build());
+        } else {
+            inlineKeyboardRow = new InlineKeyboardRow(InlineButton.SAVE_EDIT_FILTER.build());
+        }
         return InlineKeyboardMarkup.builder()
                 .keyboard(List.of(
-                        new InlineKeyboardRow(InlineButton.SET_FILTER_WORD.build()),
-                        new InlineKeyboardRow(InlineButton.SET_FILTER_CATEGORY.build()),
-                        new InlineKeyboardRow(InlineButton.SET_FILTER_PRICE.build()),
-                        new InlineKeyboardRow(InlineButton.SAVE_EDIT_FILTER.build(), InlineKeyboardButton.builder().text("Удалить").callbackData("deleteFilter_" + filterId).build()))
+                        new InlineKeyboardRow(dynamicFilterButton(formatField(searchFilter.getKeyword(), "Без названия", ""),
+                                InlineButton.SET_FILTER_WORD.getData())),
+                        new InlineKeyboardRow(dynamicFilterButton(formatField(searchFilter.getCategory(), "Без категории", ""),
+                                InlineButton.SET_FILTER_CATEGORY.getData())),
+                        new InlineKeyboardRow(dynamicFilterButton(formatField(searchFilter.getMaxPrice(), "Без лимита", "₽"),
+                                InlineButton.SET_FILTER_PRICE.getData())),
+                        inlineKeyboardRow)
                 ).build();
     }
 
@@ -116,7 +126,6 @@ public class KeyboardFactory {
                 .build();
         return InlineKeyboardMarkup.builder()
                 .keyboard(List.of(
-
                         new InlineKeyboardRow(linkButton),
                         new InlineKeyboardRow(InlineButton.DELETE_TRACKER.build()),
                         new InlineKeyboardRow(InlineButton.BACK_TRACK.build())
@@ -124,10 +133,9 @@ public class KeyboardFactory {
                 .build();
     }
 
-    public static InlineKeyboardMarkup inputLinkMenu(){
+    public static InlineKeyboardMarkup inputLinkMenu() {
         return InlineKeyboardMarkup.builder()
                 .keyboard(List.of(
-
                         new InlineKeyboardRow(InlineButton.CANCEL.build())
                 ))
                 .build();
@@ -143,7 +151,7 @@ public class KeyboardFactory {
                 .build();
     }
 
-    public static ReplyKeyboardMarkup getButtons (KeyboardRow... row){
+    private static ReplyKeyboardMarkup getButtons(KeyboardRow... row) {
         return ReplyKeyboardMarkup.builder()
                 .keyboard(List.of(row)) // Добавляем список рядов
                 .resizeKeyboard(true)
@@ -151,4 +159,19 @@ public class KeyboardFactory {
                 .selective(true)
                 .build();
     }
+
+    private static InlineKeyboardButton dynamicFilterButton(String text, String callbackData) {
+        return InlineKeyboardButton.builder()
+                .text(text)
+                .callbackData(callbackData)
+                .build();
+    }
+
+    private static String formatField(Object value, String placeholder, String suffix) {
+        return Optional.ofNullable(value).filter(v -> !v.toString().isEmpty())
+                .map(v -> v + suffix).
+                orElse(placeholder);
+    }
+
+
 }
