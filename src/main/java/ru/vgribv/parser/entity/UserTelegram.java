@@ -16,8 +16,9 @@ public class UserTelegram {
 
     public UserTelegram(){}
 
-    public UserTelegram (long chatId){
+    public UserTelegram (long chatId, String name) {
         this.chatId = chatId;
+        this.name = name;
     }
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -34,11 +35,11 @@ public class UserTelegram {
     @Override
     public boolean equals(Object o) {
         if (!(o instanceof UserTelegram that)) return false;
-        return Objects.equals(id, that.id);
+        return Objects.equals(chatId, that.chatId);
     }
 
     @Override
     public int hashCode() {
-        return getClass().hashCode();
+        return Objects.hashCode(chatId);
     }
 }
