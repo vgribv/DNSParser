@@ -17,7 +17,7 @@ public class Product {
 
     public Product(){}
 
-    public Product (String linkId, String name, int discountPrice, int fullPrice, Category category, LocalDateTime updatedAt){
+    public Product (String linkId, String name, Integer discountPrice, Integer fullPrice, Category category, LocalDateTime updatedAt){
         this.name = name;
         this.discountPrice = discountPrice;
         this.fullPrice = fullPrice;
@@ -27,7 +27,12 @@ public class Product {
     }
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "product_seq_gen")
+    @SequenceGenerator(
+            name = "product_seq_gen",
+            sequenceName = "product_sequence",
+            allocationSize = 50
+    )
     private Long id;
 
     @Column(name = "link_id", unique = true, nullable = false)
@@ -48,7 +53,7 @@ public class Product {
     private Integer oldDiscountPrice;
 
     @Transient
-    private boolean goodPurchased = false;
+    private boolean productPurchased = false;
 
     @ManyToOne
     @JoinColumn(name = "category_id")
@@ -57,11 +62,11 @@ public class Product {
     @Override
     public boolean equals(Object o) {
         if (!(o instanceof Product product)) return false;
-        return Objects.equals(id, product.id);
+        return Objects.equals(linkId, product.linkId);
     }
 
     @Override
     public int hashCode() {
-        return getClass().hashCode();
+        return Objects.hashCode(linkId);
     }
 }
