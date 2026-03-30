@@ -16,11 +16,6 @@ public class Tracker {
 
     public Tracker(){}
 
-    public Tracker(long chatId, String link) {
-        this.chatId = chatId;
-        this.link = link;
-    }
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -35,11 +30,11 @@ public class Tracker {
     @Override
     public boolean equals(Object o) {
         if (!(o instanceof Tracker tracker)) return false;
-        return Objects.equals(id, tracker.id);
+        return Objects.equals(chatId, tracker.chatId) && Objects.equals(link, tracker.link);
     }
 
     @Override
     public int hashCode() {
-        return getClass().hashCode();
+        return Objects.hash(chatId, link);
     }
 }
