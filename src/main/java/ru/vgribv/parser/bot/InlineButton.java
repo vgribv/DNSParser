@@ -4,15 +4,15 @@ import lombok.Getter;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 
 public enum InlineButton {
-    GOODS_PERCENT_TXT("Все товары по максимальной скидке", "goodsDiscountPercent"),
-    GOODS_LOG("Запись изменений", "goodsLog"),
-    GOODS_TXT("Все товары по порядку", "goodsTxt"),
-    ALL_GOODS("Все товары", "allGoods"),
+    PRODUCT_PERCENT_FILE("Все товары по максимальной скидке", "goodsDiscountPercent"),
+    PRODUCT_LOG("Запись изменений", "goodsLog"),
+    PRODUCT_FILE("Все товары по порядку", "productFile"),
+    ALL_PRODUCTS("Все товары", "allProducts"),
     BACK_TRACK("Назад", "backTrack"),
     FILTERS("Фильтры", "filters"),
     TRACK("Отслеживать", "track"),
     TRACK_NEW("Отследить новый товар", "newTracker"),
-    TRACK_GOODS("Отслеживаемые товары", "trackGoods"),
+    TRACK_PRODUCTS("Отслеживаемые товары", "trackProducts"),
     PARSE("Принудительный парсинг", "parse"),
     NEW_FILTER("Новый фильтр", "newFilter"),
     SET_FILTER_WORD("Ключевое слово", "setFilterWord"),
