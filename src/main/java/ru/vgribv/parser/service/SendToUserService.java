@@ -19,9 +19,9 @@ public class SendToUserService {
     private final TrackerRepository trackerRepository;
     private final SearchFilterRepository searchFilterRepository;
 
-    public SendToUserService(TrackerRepository trackerRepository, TelegramBot telegramBot, SearchFilterRepository searchFilterRepository) {
-        this.trackerRepository = trackerRepository;
+    public SendToUserService(TelegramBot telegramBot, TrackerRepository trackerRepository, SearchFilterRepository searchFilterRepository) {
         this.telegramBot = telegramBot;
+        this.trackerRepository = trackerRepository;
         this.searchFilterRepository = searchFilterRepository;
     }
 
@@ -101,7 +101,7 @@ public class SendToUserService {
 
     private void processFilters(Map<String, Product> newProductsMap, Map<Long, List<Product>> outputNewProductsFilterMap,
                                 Map<String, Product> priceHasDecreasedMap, Map<Long, List<Product>> outputPriceHasDecreasedFilterMap) {
-        List<SearchFilter> filters = StreamSupport.stream(searchFilterRepository.findAll().spliterator(), false).toList();
+        List<SearchFilter> filters = searchFilterRepository.findAll().stream().toList();
 
         Map<Product, String> preparedProductNames = new HashMap<>();
         newProductsMap.values().forEach(product -> preparedProductNames.put(product, product.getName().toLowerCase()));
