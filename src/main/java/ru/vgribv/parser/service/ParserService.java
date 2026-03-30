@@ -15,15 +15,20 @@ import com.microsoft.playwright.*;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import ru.vgribv.parser.dto.DiscountResultDto;
+import ru.vgribv.parser.entity.PriceHistory;
 import ru.vgribv.parser.event.ParsingResultEvent;
 import ru.vgribv.parser.entity.Category;
 import ru.vgribv.parser.entity.Product;
+import ru.vgribv.parser.repository.ArchivedProductRepository;
 import ru.vgribv.parser.repository.CategoryRepository;
+import ru.vgribv.parser.repository.PriceHistoryRepository;
 import ru.vgribv.parser.repository.ProductRepository;
 import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.BrowserType;
@@ -39,31 +44,45 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Service
 @Slf4j
 public class ParserService {
-
     private final ParserService self;
-
     @Getter
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final ApplicationEventPublisher publisher;
-
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
+    private final ArchivedProductRepository archivedProductRepository;
     private final FileWriteService fileWriteService;
     private final SendToUserService sendToUserService;
+    private final PriceHistoryRepository priceHistoryRepository;
     private Playwright playwright;
     private BrowserContext context;
     private final Path userDataDir = Paths.get("dns_real_profile");
-
+    private final String linkPrefix;
+    private final String linkProductsFilters;
+    private final String linkReferer;
+    private final String linkAjaxState;
 
     public ParserService(@Lazy ParserService self, ApplicationEventPublisher publisher,
                          ProductRepository productRepository, CategoryRepository categoryRepository,
-                         FileWriteService fileWriteService, @Lazy SendToUserService sendToUserService) {
+                         ArchivedProductRepository archivedProductRepository,
+                         FileWriteService fileWriteService, @Lazy SendToUserService sendToUserService,
+                         @Value("${dns.link.prefix}") String linkPrefix,
+                         @Value("${dns.link.products.filters}") String linkProductsFilters,
+                         @Value("${dns.link.referer}") String linkReferer,
+                         @Value("${dns.link.ajax.state}") String linkAjaxState,
+                         PriceHistoryRepository priceHistoryRepository) {
         this.self = self;
         this.publisher = publisher;
         this.productRepository = productRepository;
         this.categoryRepository = categoryRepository;
+        this.archivedProductRepository = archivedProductRepository;
         this.fileWriteService = fileWriteService;
         this.sendToUserService = sendToUserService;
+        this.linkPrefix = linkPrefix;
+        this.linkProductsFilters = linkProductsFilters;
+        this.linkReferer = linkReferer;
+        this.linkAjaxState = linkAjaxState;
+        this.priceHistoryRepository = priceHistoryRepository;
     }
 
     private void initBrowser() {
@@ -124,7 +143,6 @@ public class ParserService {
     }
 
     private void parseGoods() {
-
         try {
             Files.createDirectories(Paths.get("data"));
         } catch (IOException e) {
@@ -140,7 +158,7 @@ public class ParserService {
             Page page = context.pages().getFirst();
             for (int i = 0; true; i++) {
                 try {
-                    page.navigate("https://www.dns-shop.ru/catalog/markdown/?p=1",
+                    page.navigate(linkPrefix + "?p=1",
                             new Page.NavigateOptions()
                                     .setWaitUntil(WaitUntilState.DOMCONTENTLOADED)
                                     .setTimeout(60000));
@@ -154,10 +172,10 @@ public class ParserService {
             }
 
             APIRequestContext request = context.request();
-            APIResponse response3 = request.get("https://www.dns-shop.ru/catalogMarkdown/markdown/products-filters/",
+            APIResponse response3 = request.get(linkProductsFilters,
                     RequestOptions.create()
                             .setHeader("X-Requested-With", "XMLHttpRequest")
-                            .setHeader("Referer", "https://www.dns-shop.ru")
+                            .setHeader("Referer", linkReferer)
             );
             String contentType = response3.headers().get("content-type");
             if (response3.status() != 200 || contentType == null || !contentType.contains("application/json")) {
@@ -185,10 +203,12 @@ public class ParserService {
                 categoryMap.put(category.getCategoryId(), category);
             }
 
-            Iterable<Product> allProducts = productRepository.findAll();
+            Iterable<Product> allProducts = productRepository.findAllWithCategories();
             Map<String, Product> productMap = new HashMap<>();
+            Map<String, Integer> oldPriceMap = new HashMap<>();
             for (Product product : allProducts) {
                 productMap.put(product.getLinkId(), product);
+                oldPriceMap.put(product.getLinkId(), product.getDiscountPrice());
             }
             List<Product> productsToSave = new ArrayList<>();
             Random random = new Random();
@@ -214,13 +234,20 @@ public class ParserService {
                 int currentPage = 1;
                 boolean flag = false;
                 while (!flag && currentPage < 100) {
-                    APIResponse response = request.get("https://www.dns-shop.ru/catalog/markdown/?category=" + category.getCategoryId() + "&p=" + currentPage++,
+                    showProgress(category.getName(), currentPage);
+                    APIResponse response = request.get(linkPrefix + "?category=" + category.getCategoryId() + "&p=" + currentPage++,
                             RequestOptions.create()
                                     .setHeader("X-Requested-With", "XMLHttpRequest")
-                                    .setHeader("Referer", "https://www.dns-shop.ru"));
+                                    .setHeader("Referer", linkReferer));
 
-                    showProgress(category.getName(), currentPage);
-
+                    String rawText = response.text();
+                    if (rawText == null || !rawText.trim().startsWith("{")) {
+                        log.warn("❌ Вместо JSON пришло что-то странное в категории {}. Пропускаю...", category.getName());
+                        if (rawText != null) {
+                            log.warn("Raw body: {}", rawText.substring(0, Math.min(rawText.length(), 100)));
+                        }
+                        break;
+                    }
                     JsonObject jsonObject = JsonParser.parseString(response.text()).getAsJsonObject();
                     if (!jsonObject.has("html") || jsonObject.get("html").isJsonNull() || jsonObject.get("html").getAsString().isBlank()) {
                         log.warn("В категории '{}' (ID: {}) товары не найдены. Пропускаю...",
@@ -235,12 +262,12 @@ public class ParserService {
                     String req = buildPriceRequest(realHtml);
                     String csrfToken = getToken(context.pages().getFirst());
 
-                    APIResponse response2 = context.request().post("https://www.dns-shop.ru/ajax-state/product-buy/",
+                    APIResponse response2 = context.request().post(linkAjaxState,
                             RequestOptions.create()
                                     .setHeader("Content-Type", "application/x-www-form-urlencoded")
                                     .setHeader("x-csrf-token", csrfToken)
                                     .setHeader("x-requested-with", "XMLHttpRequest")
-                                    .setHeader("referer", "https://www.dns-shop.ru")
+                                    .setHeader("referer", linkReferer)
                                     .setData("data=" + req));
 
                     JsonObject root = JsonParser.parseString(response2.text()).getAsJsonObject();
@@ -279,13 +306,16 @@ public class ParserService {
             log.info("Этап 4: Сохранение результатов и рассылка...");
 
             List<Product> newProducts = getNewProductList(productsToSave, productMap);
-            List<Product> priceHasDecreased = getProductListWherePriceHasDecreased(productsToSave, productMap);
-            List<Product> deletedProducts = productRepository.findAllByUpdatedAtBefore(time);
 
-            self.saveParsedData(time, uniqueCategoryMap, productsToSave);
+            DiscountResultDto result = getDiscountResult(productsToSave, oldPriceMap);
+            List<Product> priceHasDecreased = result.discountedProducts();
+            List<PriceHistory> priceHistory = result.historyRecords();
+            System.out.println(priceHistory.size());
 
+            List<Product> deletedProducts =
+                    self.saveParsedDataAndGetDeletedProducts(time, uniqueCategoryMap, productsToSave, priceHistory);
             try {
-                fileWriteService.writeFile(newProducts, priceHasDecreased, deletedProducts);
+                fileWriteService.updateAllReports(newProducts, priceHasDecreased, deletedProducts);
             } catch (Exception e) {
                 log.error("Ошибка записи в файл: ", e);
             }
@@ -303,15 +333,29 @@ public class ParserService {
     }
 
     @Transactional
-    public void saveParsedData(LocalDateTime time, Map<String, Category> uniqueCategoryMap, List<Product> productsToSave) {
-
+    public List<Product> saveParsedDataAndGetDeletedProducts(LocalDateTime time,
+                                                             Map<String, Category> uniqueCategoryMap,
+                                                             List<Product> productsToSave,
+                                                             List<PriceHistory> priceHistory) {
         if (!uniqueCategoryMap.isEmpty()) {
-            categoryRepository.saveAllAndFlush(uniqueCategoryMap.values());
+            categoryRepository.saveAll(uniqueCategoryMap.values());
         }
         if (!productsToSave.isEmpty()) {
-            productRepository.saveAllAndFlush(productsToSave);
+            productRepository.saveAll(productsToSave);
         }
-        productRepository.deleteByUpdatedAtBefore(time);
+        if (!priceHistory.isEmpty()) {
+            priceHistoryRepository.saveAll(priceHistory);
+        }
+        productRepository.flush();
+        List<Product> deletedProducts = productRepository.findAllByUpdatedAtBefore(time);
+        if (!deletedProducts.isEmpty()) {
+            archivedProductRepository.archiveOldProducts(time, LocalDateTime.now());
+            priceHistoryRepository.deleteHistoryForOldProducts(time);
+            productRepository.deleteOldProductsInBatch(time);
+        }
+        log.info("📊 Итоги транзакции: сохранено/обновлено {} товаров, удалено {} товаров",
+                productsToSave.size(), deletedProducts.size());
+        return deletedProducts;
     }
 
     private List<Product> getNewProductList(List<Product> productsToSave, Map<String, Product> productMap) {
@@ -324,18 +368,28 @@ public class ParserService {
         return bufferNew;
     }
 
-    private List<Product> getProductListWherePriceHasDecreased(List<Product> productsToSave, Map<String, Product> productMap) {
-
+    private DiscountResultDto getDiscountResult(List<Product> productsToSave,
+                                                Map<String, Integer> oldPriceMap) {
         List<Product> bufferPriceHasDecreased = new ArrayList<>();
+        List<PriceHistory> historyBuffer = new ArrayList<>();
 
         for (Product product : productsToSave) {
-            Product old = productMap.get(product.getLinkId());
-            if (old != null && old.getDiscountPrice() > product.getDiscountPrice()) {
-                product.setOldDiscountPrice(old.getDiscountPrice());
-                bufferPriceHasDecreased.add(product);
+            String linkId = product.getLinkId();
+            Integer oldPrice = oldPriceMap.get(linkId);
+            if (oldPrice == null) continue;
+
+            Integer newPrice = Objects.requireNonNullElse(product.getDiscountPrice(), 0);
+
+            if (!oldPrice.equals(newPrice)) {
+                historyBuffer.add(new PriceHistory(product, newPrice, LocalDateTime.now()));
+
+                if (oldPrice > newPrice) {
+                    product.setOldDiscountPrice(oldPrice);
+                    bufferPriceHasDecreased.add(product);
+                }
             }
         }
-        return bufferPriceHasDecreased;
+        return new DiscountResultDto(bufferPriceHasDecreased, historyBuffer);
     }
 
     private String getToken(Page page) {
