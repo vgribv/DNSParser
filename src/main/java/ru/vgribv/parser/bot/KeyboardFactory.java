@@ -1,5 +1,7 @@
 package ru.vgribv.parser.bot;
 
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
@@ -13,9 +15,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+@Component
 public class KeyboardFactory {
 
-    public static SendMessage mainMenuReply(long chatId) {
+    @Value("${dns.link.prefix}")
+    private String linkPrefix;
+
+    public SendMessage mainMenuReply(long chatId) {
         KeyboardRow row1 = new KeyboardRow();
         row1.add("Все товары");
         row1.add("Фильтры");
@@ -30,7 +36,7 @@ public class KeyboardFactory {
                 .build();
     }
 
-    public static InlineKeyboardMarkup getFiltersMenu(int currentPage, List<SearchFilter> searchFilterlist) {
+    public InlineKeyboardMarkup getFiltersMenu(int currentPage, List<SearchFilter> searchFilterlist) {
         List<InlineKeyboardRow> rows = new ArrayList<>();
         int pageSize = 6;
         int start = pageSize * currentPage;
@@ -63,7 +69,7 @@ public class KeyboardFactory {
 
     }
 
-    public static InlineKeyboardMarkup getTrackersMenu(int currentPage, List<Tracker> trackerList) {
+    public InlineKeyboardMarkup getTrackersMenu(int currentPage, List<Tracker> trackerList) {
         List<InlineKeyboardRow> rows = new ArrayList<>();
         int pageSize = 6;
         int start = pageSize * currentPage;
@@ -92,14 +98,7 @@ public class KeyboardFactory {
         return InlineKeyboardMarkup.builder().keyboard(rows).build();
     }
 
-    public static InlineKeyboardMarkup inputFilterValue() {
-        return InlineKeyboardMarkup.builder()
-                .keyboard(List.of(
-                        new InlineKeyboardRow(InlineButton.CANCEL.build())
-                )).build();
-    }
-
-    public static InlineKeyboardMarkup editFilterMenu(SearchFilter searchFilter, boolean isEdit) {
+    public InlineKeyboardMarkup editFilterMenu(SearchFilter searchFilter, boolean isEdit) {
         InlineKeyboardRow inlineKeyboardRow;
         if (isEdit) {
             inlineKeyboardRow = new InlineKeyboardRow(InlineButton.SAVE_EDIT_FILTER.build(),
@@ -119,10 +118,10 @@ public class KeyboardFactory {
                 ).build();
     }
 
-    public static InlineKeyboardMarkup editTrackerMenu(String link) {
+    public InlineKeyboardMarkup editTrackerMenu(String link) {
         InlineKeyboardButton linkButton = InlineKeyboardButton.builder()
                 .text("🔗 Перейти к товару")
-                .url("https://www.dns-shop.ru/catalog/markdown/" + link)
+                .url(linkPrefix + link)
                 .build();
         return InlineKeyboardMarkup.builder()
                 .keyboard(List.of(
@@ -133,7 +132,7 @@ public class KeyboardFactory {
                 .build();
     }
 
-    public static InlineKeyboardMarkup inputLinkMenu() {
+    public InlineKeyboardMarkup inputLinkMenu() {
         return InlineKeyboardMarkup.builder()
                 .keyboard(List.of(
                         new InlineKeyboardRow(InlineButton.CANCEL.build())
@@ -141,17 +140,17 @@ public class KeyboardFactory {
                 .build();
     }
 
-    public static InlineKeyboardMarkup getGoodsMenu() {
+    public InlineKeyboardMarkup getGoodsMenu() {
         return InlineKeyboardMarkup.builder()
                 .keyboard(List.of(
-                        new InlineKeyboardRow(InlineButton.GOODS_TXT.build()),
-                        new InlineKeyboardRow(InlineButton.GOODS_PERCENT_TXT.build()),
-                        new InlineKeyboardRow(InlineButton.GOODS_LOG.build())
+                        new InlineKeyboardRow(InlineButton.PRODUCT_FILE.build()),
+                        new InlineKeyboardRow(InlineButton.PRODUCT_PERCENT_FILE.build()),
+                        new InlineKeyboardRow(InlineButton.PRODUCT_LOG.build())
                 ))
                 .build();
     }
 
-    private static ReplyKeyboardMarkup getButtons(KeyboardRow... row) {
+    private ReplyKeyboardMarkup getButtons(KeyboardRow... row) {
         return ReplyKeyboardMarkup.builder()
                 .keyboard(List.of(row)) // Добавляем список рядов
                 .resizeKeyboard(true)
@@ -160,14 +159,14 @@ public class KeyboardFactory {
                 .build();
     }
 
-    private static InlineKeyboardButton dynamicFilterButton(String text, String callbackData) {
+    private InlineKeyboardButton dynamicFilterButton(String text, String callbackData) {
         return InlineKeyboardButton.builder()
                 .text(text)
                 .callbackData(callbackData)
                 .build();
     }
 
-    private static String formatField(Object value, String placeholder, String suffix) {
+    private String formatField(Object value, String placeholder, String suffix) {
         return Optional.ofNullable(value).filter(v -> !v.toString().isEmpty())
                 .map(v -> v + suffix).
                 orElse(placeholder);
