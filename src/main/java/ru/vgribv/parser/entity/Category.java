@@ -15,7 +15,12 @@ import java.util.Objects;
 @ToString
 public class Category {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "category_seq_gen")
+    @SequenceGenerator(
+            name = "category_seq_gen",
+            sequenceName = "category_sequence",
+            allocationSize = 50
+    )
     private Long id;
 
     @Column(name = "category_id", unique = true, nullable = false)
@@ -30,11 +35,11 @@ public class Category {
     @Override
     public boolean equals(Object o) {
         if (!(o instanceof Category category)) return false;
-        return Objects.equals(id, category.id);
+        return Objects.equals(categoryId, category.categoryId);
     }
 
     @Override
     public int hashCode() {
-        return getClass().hashCode();
+        return Objects.hashCode(categoryId);
     }
 }
