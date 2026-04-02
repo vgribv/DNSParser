@@ -137,7 +137,7 @@ public class SendToUserService {
                 String filterKeyword =  preparedKeywords.get(filter);
                 if (matchesFilter(product, productName, filter, filterKeyword)){
                     Long chatId = filter.getChatId();
-                    outputProductsFilterMap.computeIfAbsent(chatId, _ -> new ArrayList<>()).add(product);
+                    outputProductsFilterMap.computeIfAbsent(chatId, f -> new ArrayList<>()).add(product);
                 }
             }
         }
@@ -146,7 +146,7 @@ public class SendToUserService {
     private void checkAndAdd (String link, Long chatId, Map<String, Product> productsMap,
                               Map<Long, List<Product>> outputProductsMap){
         if (productsMap.containsKey(link)) {
-            outputProductsMap.computeIfAbsent(chatId, _ -> new ArrayList<>()).add(productsMap.get(link));
+            outputProductsMap.computeIfAbsent(chatId, f -> new ArrayList<>()).add(productsMap.get(link));
         }
     }
 

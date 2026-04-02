@@ -232,7 +232,7 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
                     executeMessage(deleteMessageReply);
                 }
 
-                case "Парсинг" -> parserService.manualRun().ifPresentOrElse(_ ->
+                case "Парсинг" -> parserService.manualRun().ifPresentOrElse(p ->
                                 sendMessageText(chatId, "✅ Парсинг успешно запущен."),
                         () -> sendMessageText(chatId, "⏳ Ошибка: Задача уже выполняется."));
 
