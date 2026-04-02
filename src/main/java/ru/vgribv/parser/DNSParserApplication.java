@@ -6,9 +6,7 @@ import org.springframework.retry.annotation.EnableRetry;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
-@SpringBootApplication(excludeName = {
-		"org.telegram.telegrambots.springboot.longpolling.starter.TelegramBotStarterConfiguration"
-})
+@SpringBootApplication
 @EnableScheduling
 @EnableAsync
 @EnableRetry
