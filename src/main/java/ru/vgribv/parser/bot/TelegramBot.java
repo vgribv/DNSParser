@@ -4,11 +4,10 @@ import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.DependsOn;
 import org.springframework.context.annotation.Lazy;
-import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.longpolling.interfaces.LongPollingUpdateConsumer;
+import org.telegram.telegrambots.longpolling.starter.SpringLongPollingBot;
 import org.telegram.telegrambots.longpolling.util.LongPollingSingleThreadUpdateConsumer;
 import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery;
 import org.telegram.telegrambots.meta.api.methods.ParseMode;
@@ -46,9 +45,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 @Component
 @Slf4j
-@Primary
-@DependsOn("telegramClientWithProxy")
-public class TelegramBot implements LongPollingSingleThreadUpdateConsumer {
+public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, SpringLongPollingBot {
 
     private final TelegramClient telegramClient;
     private final String botToken;
@@ -68,8 +65,8 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer {
     private final ReportService reportService;
     private final KeyboardFactory  keyboardFactory;
 
-    public TelegramBot(@Lazy @Qualifier("telegramClientWithProxy") TelegramClient telegramClient,
-                       @Value("${bot.token}") String botToken,
+    public TelegramBot(@Qualifier("telegramClientWithProxy") TelegramClient telegramClient,
+                       @Value("${BOT_TOKEN}") String botToken,
                        ProductRepository productRepository, TrackerRepository trackerRepository,
                        UserTelegramRepository userTelegramRepository, SearchFilterRepository searchFilterRepository,
                        ParserService parserService, ReportService reportService, KeyboardFactory keyboardFactory) {
@@ -91,10 +88,12 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer {
         log.info("Загружено {} пользователей в кэш", activeUsersCache.size());
     }
 
+    @Override
     public String getBotToken() {
         return botToken;
     }
 
+    @Override
     public LongPollingUpdateConsumer getUpdatesConsumer() {
         return this;
     }

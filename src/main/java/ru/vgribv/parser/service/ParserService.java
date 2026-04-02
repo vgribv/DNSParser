@@ -97,7 +97,7 @@ public class ParserService {
         this.playwright = Playwright.create();
         this.context = playwright.chromium().launchPersistentContext(userDataDir, new BrowserType.LaunchPersistentContextOptions()
                 .setHeadless(false)
-                .setProxy(new Proxy("http://" + hostname + ":" + port))
+                //.setProxy(new Proxy("http://" + hostname + ":" + port))
                 .setIgnoreDefaultArgs(List.of("--enable-automation"))
                 .setArgs(Arrays.asList(
                         "--no-sandbox",
