@@ -11,7 +11,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableAsync
 @EnableRetry
 public class DNSParserApplication {
-	void main() {
+	public static void main(String[] args) {
 		SpringApplication.run(DNSParserApplication.class);
 	}
 }
