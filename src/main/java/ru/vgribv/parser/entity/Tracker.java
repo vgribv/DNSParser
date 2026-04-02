@@ -1,9 +1,17 @@
 package ru.vgribv.parser.entity;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Column;
+
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 import java.util.Objects;
 
@@ -12,9 +20,12 @@ import java.util.Objects;
 @Getter
 @Setter
 @ToString
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Tracker {
 
-    public Tracker(){}
+    public Tracker(long chatId) {
+        this.chatId = chatId;
+    }
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

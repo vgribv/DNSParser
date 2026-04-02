@@ -1,9 +1,19 @@
 package ru.vgribv.parser.entity;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Column;
+import jakarta.persistence.SequenceGenerator;
+import jakarta.persistence.OneToMany;
+
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 import java.util.List;
 import java.util.Objects;
@@ -13,7 +23,14 @@ import java.util.Objects;
 @Getter
 @Setter
 @ToString
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Category {
+
+    public Category (String categoryId, String name){
+        this.categoryId = categoryId;
+        this.name = name;
+    }
+
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "category_seq_gen")
     @SequenceGenerator(

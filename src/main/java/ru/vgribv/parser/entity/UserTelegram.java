@@ -1,9 +1,17 @@
 package ru.vgribv.parser.entity;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Column;
+
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 
 import java.util.Objects;
 
@@ -12,9 +20,8 @@ import java.util.Objects;
 @Getter
 @Setter
 @ToString
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class UserTelegram {
-
-    public UserTelegram(){}
 
     public UserTelegram (long chatId, String name) {
         this.chatId = chatId;
@@ -30,7 +37,7 @@ public class UserTelegram {
     private String name;
 
     @Column(name = "is_active")
-    private boolean isActive;
+    private boolean isActive = true;
 
     @Override
     public boolean equals(Object o) {
