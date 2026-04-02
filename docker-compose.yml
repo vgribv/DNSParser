@@ -13,6 +13,8 @@ services:
       - pgdata:/var/lib/postgresql/data
 
   bot:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     build: .
     container_name: dns_bot
     restart: always
@@ -24,6 +26,8 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       BOT_TOKEN: ${BOT_TOKEN}
       BOT_NAME: ${BOT_NAME}
+      PROXY_HOST: ${PROXY_HOST}
+      PROXY_PORT: ${PROXY_PORT}
 
 volumes:
   pgdata:

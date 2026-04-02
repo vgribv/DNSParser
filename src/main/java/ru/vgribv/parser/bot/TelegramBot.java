@@ -4,6 +4,7 @@ import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.DependsOn;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.longpolling.interfaces.LongPollingUpdateConsumer;
@@ -45,6 +46,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 @Component
 @Slf4j
+@DependsOn("telegramClientWithProxy")
 public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, SpringLongPollingBot {
 
     private final TelegramClient telegramClient;
@@ -65,7 +67,7 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
     private final ReportService reportService;
     private final KeyboardFactory  keyboardFactory;
 
-    public TelegramBot(@Qualifier("telegramClientWithProxy") TelegramClient telegramClient,
+    public TelegramBot(@Lazy @Qualifier("telegramClientWithProxy") TelegramClient telegramClient,
                        @Value("${bot.token}") String botToken,
                        ProductRepository productRepository, TrackerRepository trackerRepository,
                        UserTelegramRepository userTelegramRepository, SearchFilterRepository searchFilterRepository,
