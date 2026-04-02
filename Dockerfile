@@ -12,4 +12,4 @@ RUN apt-get update && apt-get install -y openjdk-21-jdk-headless maven xvfb
 ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
 ENV PATH="$JAVA_HOME/bin:$PATH"
 COPY --from=build /app/target/*.jar app.jar
-ENTRYPOINT ["xvfb-run", "-a", "--server-args=-screen 0 1920x1080x24", "java", "-jar", "app.jar"]
+ENTRYPOINT ["sh", "-c", "xvfb-run -a --server-args='-screen 0 1920x1080x24' java -jar app.jar 2>&1"]
