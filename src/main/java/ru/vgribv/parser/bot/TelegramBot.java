@@ -14,6 +14,7 @@ import org.telegram.telegrambots.meta.api.methods.ParseMode;
 import org.telegram.telegrambots.meta.api.methods.botapimethods.BotApiMethod;
 import org.telegram.telegrambots.meta.api.methods.send.SendDocument;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.DeleteMessage;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
 import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
@@ -24,7 +25,11 @@ import org.telegram.telegrambots.meta.api.objects.message.Message;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
-import ru.vgribv.parser.entity.*;
+import ru.vgribv.parser.entity.Tracker;
+import ru.vgribv.parser.entity.SearchFilter;
+import ru.vgribv.parser.entity.UserTelegram;
+import ru.vgribv.parser.entity.Product;
+import ru.vgribv.parser.entity.Category;
 import ru.vgribv.parser.repository.ProductRepository;
 import ru.vgribv.parser.repository.SearchFilterRepository;
 import ru.vgribv.parser.repository.TrackerRepository;
@@ -36,6 +41,7 @@ import java.io.File;
 import java.io.Serializable;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Component
 @Slf4j
@@ -59,7 +65,7 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
     private final ReportService reportService;
     private final KeyboardFactory  keyboardFactory;
 
-    public TelegramBot(@Qualifier("telegramClientWithoutProxy") TelegramClient telegramClient,
+    public TelegramBot(@Qualifier("telegramClientWithProxy") TelegramClient telegramClient,
                        @Value("${bot.token}") String botToken,
                        ProductRepository productRepository, TrackerRepository trackerRepository,
                        UserTelegramRepository userTelegramRepository, SearchFilterRepository searchFilterRepository,
@@ -240,7 +246,7 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
             CallbackQuery callback = update.getCallbackQuery();
             String callData = callback.getData();
             long chatId = callback.getMessage().getChatId();
-            int messageId = callback.getMessage().getMessageId();
+            Integer messageId = callback.getMessage().getMessageId();
 
             if (callData.startsWith("editFilter_")) {
                 SearchFilter searchFilter = searchFilterRepository
@@ -270,18 +276,36 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
                 String link = String.valueOf(callData.split("_")[1]);
                 StringBuilder sb = new StringBuilder();
 
+                deleteMessage(chatId, messageId);
+                AtomicReference<String> imgUrl = new AtomicReference<>("");
                 productRepository.findProductByLinkId(link).ifPresentOrElse(product -> {
                             Category category = product.getCategory();
+                            String typeOfRepair = product.getTypeOfRepair();
                             String categoryName = (category != null) ? category.getName() : "Общая категория";
                             sb.append("<b>").append(product.getName()).append("</b>\n")
                                     .append("💰 Цена: <s>").append(product.getFullPrice()).append("</s> ")
-                                    .append(product.getDiscountPrice()).append(" руб.\n")
-                                    .append("\uD83D\uDCCA Категория: ").append(categoryName).append("\n");
+                                    .append("<b>").append(product.getDiscountPrice()).append(" руб.</b>\n")
+                                    .append("\uD83D\uDCCA Категория: ").append(categoryName).append("\n")
+                                    .append("🛠 Состояние: ").append(product.getCondition()).append("\n")
+                                    .append("✨ Внешний вид: ").append(product.getAppearance()).append("\n")
+                                    .append("📦 Комплектация: ").append(product.getCompleteness()).append("\n");
+                                    if (typeOfRepair != null){
+                                        sb.append("🔧 Ремонт: ").append(typeOfRepair).append("\n");
+                                    }
+                                    imgUrl.set(product.getImageUrl());
                         },
                         () -> sendMessageText(chatId, "Ошибка. Попробуйте еще раз."));
 
+                InputFile file = new InputFile(imgUrl.get());
+                SendPhoto sendPhoto = SendPhoto.builder()
+                        .chatId(chatId)
+                        .caption(sb.toString())
+                        .photo(file)
+                        .parseMode(ParseMode.HTML)
+                        .replyMarkup(keyboardFactory.editTrackerMenu(link))
+                        .build();
+                sendPhoto(sendPhoto);
                 Tracker tracker = trackerRepository.findFirstByChatIdAndLink(chatId, link);
-                editMenu(chatId, messageId, sb.toString(), keyboardFactory.editTrackerMenu(link));
                 tempTrackerValues.put(chatId, tracker);
 
             } else if (callData.equals(InlineButton.FILTERS.getData())) {
@@ -290,9 +314,8 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
                         keyboardFactory.getFiltersMenu(userPages.get(chatId), searchFilters));
 
             } else if (callData.equals(InlineButton.BACK_TRACK.getData())) {
-                List<Tracker> trackerList = trackerRepository.getAllByChatId(chatId);
-                editMenu(chatId, messageId, "Список отслеживаемых товаров",
-                        keyboardFactory.getTrackersMenu(userPages.get(chatId), trackerList));
+                deleteMessage(chatId, messageId);
+                menuTrack(chatId);
 
             } else if (callData.equals(InlineButton.PRODUCT_FILE.getData())) {
                 sendFile(chatId, reportService.getProductsReport(), "📄 Ваш файл");
@@ -361,10 +384,9 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
                 }
             } else if (callData.equals(InlineButton.DELETE_TRACKER.getData())) {
                 try {
-                    List<Tracker> trackerList = trackerRepository.getAllByChatId(chatId);
                     trackerRepository.deleteTrackerByChatIdAndId(chatId, tempTrackerValues.get(chatId).getId());
                     answerCallback(update.getCallbackQuery().getId(), "Ссылка удалена");
-                    editMenu(chatId, messageId, "Список отслеживаемых товаров", keyboardFactory.getTrackersMenu(userPages.get(chatId), trackerList));
+                    menuTrack(chatId);
                 } catch (RuntimeException e) {
                     log.error("Ошибка удаления трекера пользователя {}: ", chatId, e);
                     answerCallback(update.getCallbackQuery().getId(), "❌ Ошибка БД. Попробуйте позже");
@@ -501,6 +523,14 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
         }
     }
 
+    private void sendPhoto (SendPhoto sendPhoto) {
+        try {
+            telegramClient.execute(sendPhoto);
+        } catch (TelegramApiException e) {
+            log.error("Ошибка при отправки фото: {}", e.getMessage());
+        }
+    }
+
     private boolean isUserNotAuthorized(long chatId) {
         return !activeUsersCache.contains(chatId);
     }
@@ -508,5 +538,14 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
     private void registerUser(long chatId, String name) {
         userTelegramRepository.save(new UserTelegram(chatId, name));
         activeUsersCache.add(chatId);
+    }
+
+    private void deleteMessage(long chatId, Integer messageId) {
+        DeleteMessage deleteMessage = new DeleteMessage(String.valueOf(chatId), messageId);
+        try {
+            telegramClient.execute(deleteMessage);
+        } catch (TelegramApiException e) {
+            log.error("Не удалось удалить карточку товара: {}", e.getMessage());
+        }
     }
 }
