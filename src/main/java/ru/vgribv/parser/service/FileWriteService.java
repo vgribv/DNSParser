@@ -10,7 +10,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.FileTime;
 import java.time.Instant;
@@ -41,7 +40,7 @@ public class FileWriteService {
     }
 
     private void createProductsFile() {
-        Path path = Paths.get("data", "productsReport.csv");
+        Path path = Path.of("data", "productsReport.csv");
         try {
             Files.createDirectories(path.getParent());
             StringBuilder sb = new StringBuilder();
@@ -65,7 +64,7 @@ public class FileWriteService {
     }
 
     private void createPercentReport() {
-        Path path = Paths.get("data", "productsPercentReport.csv");
+        Path path = Path.of("data", "productsPercentReport.csv");
 
         try {
             Files.createDirectories(path.getParent());
@@ -97,7 +96,7 @@ public class FileWriteService {
     private void createReportFile(List<Product> bufferNew, List<Product> bufferPriceHasDecreased, List<Product> bufferRemoved) {
 
         String date = LocalDate.now().toString();
-        Path path = Paths.get("data", "report_" + date + ".csv");
+        Path path = Path.of("data", "report_" + date + ".csv");
 
         try {
             Files.createDirectories(path.getParent());
@@ -145,7 +144,7 @@ public class FileWriteService {
     }
 
     private void deleteOldReports() {
-        Path directory = Paths.get("data");
+        Path directory = Path.of("data");
         int daysLimit = 7;
         Instant threshold = Instant.now().minus(daysLimit, ChronoUnit.DAYS);
 
