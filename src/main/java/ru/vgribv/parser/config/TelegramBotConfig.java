@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
+import org.telegram.telegrambots.longpolling.TelegramBotsLongPollingApplication;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 import org.telegram.telegrambots.client.okhttp.OkHttpTelegramClient;
 
@@ -27,5 +28,10 @@ public class TelegramBotConfig {
     @Bean
     public TelegramClient telegramClientWithoutProxy(@Value("${bot.token}") String botToken) {
         return new OkHttpTelegramClient(botToken);
+    }
+
+    @Bean
+    public TelegramBotsLongPollingApplication telegramBotsApplication() {
+        return new TelegramBotsLongPollingApplication();
     }
 }

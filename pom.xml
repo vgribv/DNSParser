@@ -71,7 +71,7 @@
 		</dependency>
 		<dependency>
 			<groupId>org.telegram</groupId>
-			<artifactId>telegrambots-springboot-longpolling-starter</artifactId>
+			<artifactId>telegrambots-longpolling</artifactId>
 			<version>9.4.0</version>
 			<scope>compile</scope>
 		</dependency>

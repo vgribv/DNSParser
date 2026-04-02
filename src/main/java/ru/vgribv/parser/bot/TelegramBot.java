@@ -9,7 +9,6 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.longpolling.interfaces.LongPollingUpdateConsumer;
-import org.telegram.telegrambots.longpolling.starter.SpringLongPollingBot;
 import org.telegram.telegrambots.longpolling.util.LongPollingSingleThreadUpdateConsumer;
 import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery;
 import org.telegram.telegrambots.meta.api.methods.ParseMode;
@@ -49,7 +48,7 @@ import java.util.concurrent.atomic.AtomicReference;
 @Slf4j
 @Primary
 @DependsOn("telegramClientWithProxy")
-public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, SpringLongPollingBot {
+public class TelegramBot implements LongPollingSingleThreadUpdateConsumer {
 
     private final TelegramClient telegramClient;
     private final String botToken;
@@ -92,12 +91,10 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
         log.info("Загружено {} пользователей в кэш", activeUsersCache.size());
     }
 
-    @Override
     public String getBotToken() {
         return botToken;
     }
 
-    @Override
     public LongPollingUpdateConsumer getUpdatesConsumer() {
         return this;
     }
