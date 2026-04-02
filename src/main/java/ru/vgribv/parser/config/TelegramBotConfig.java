@@ -17,8 +17,8 @@ public class TelegramBotConfig {
     @Bean
     @Primary
     public TelegramClient telegramClientWithProxy(@Value("${BOT_TOKEN}") String botToken,
-                                         @Value("${proxy.hostname}") String hostname,
-                                         @Value("${proxy.port}") int port) {
+                                         @Value("${PROXY_HOST}") String hostname,
+                                         @Value("${PROXY_PORT}") int port) {
         Proxy httpProxy = new Proxy(Proxy.Type.HTTP, new InetSocketAddress(hostname, port));
         OkHttpClient client = new OkHttpClient.Builder().proxy(httpProxy).build();
 
