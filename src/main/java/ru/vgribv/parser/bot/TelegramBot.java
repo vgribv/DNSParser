@@ -37,7 +37,6 @@ import java.io.Serializable;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
-
 @Component
 @Slf4j
 public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, SpringLongPollingBot {
@@ -98,11 +97,11 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
         if (update.hasMessage() && update.getMessage().hasText()) {
             String messageText = update.getMessage().getText();
             long chatId = update.getMessage().getChatId();
-            if (!isUserAuthorized(chatId) && !messageText.equals("/start")) {
+            if (isUserNotAuthorized(chatId) && !messageText.equals("/start")) {
                 sendMessageText(chatId, "⚠️ Нажмите /start для регистрации.");
                 return;
             } else if (messageText.equals("/start")) {
-                if (!isUserAuthorized(chatId)) {
+                if (isUserNotAuthorized(chatId)) {
                     User from = update.getMessage().getFrom();
                     registerUser(chatId, from.getFirstName());
                     log.info("Зарегистрирован новый пользователь: {}", from.getFirstName());
@@ -167,7 +166,6 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
                         } else {
                             Optional<Product> productOptional = productRepository.findProductByLinkId(productId);
                             productOptional.ifPresentOrElse(product -> {
-                                        tracker.setChatId(chatId);
                                         tracker.setLink(productId);
                                         tracker.setName(product.getName());
                                         trackerRepository.save(tracker);
@@ -311,7 +309,7 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
                 editMenu(chatId, messageId, "Заполните фильтр", keyboardFactory.editFilterMenu(filter, false));
 
             } else if (callData.equals(InlineButton.TRACK_NEW.getData())) {
-                tempTrackerValues.put(chatId, new Tracker());
+                tempTrackerValues.put(chatId, new Tracker(chatId));
                 showInputLinkMenu(chatId);
                 userState.put(chatId, "WAITING_FOR_LINK");
                 userMessageIdTemp.put(chatId, messageId);
@@ -503,8 +501,8 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
         }
     }
 
-    private boolean isUserAuthorized(long chatId) {
-        return activeUsersCache.contains(chatId);
+    private boolean isUserNotAuthorized(long chatId) {
+        return !activeUsersCache.contains(chatId);
     }
 
     private void registerUser(long chatId, String name) {
