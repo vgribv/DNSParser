@@ -4,6 +4,8 @@ target/
 dns_real_profile/
 dns_real_profile/**
 data/
+.env
+.idea/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/

@@ -1,0 +1,27 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: dns_db
+    restart: always
+    environment:
+      POSTGRES_DB: dnsparser
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  bot:
+    build: .
+    container_name: dns_bot
+    restart: always
+    depends_on:
+      - db
+    environment:
+      SPRING_DATASOURCE_URL: ${DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      BOT_TOKEN: ${BOT_TOKEN}
+      BOT_NAME: ${BOT_NAME}
+
+volumes:
+  pgdata:
