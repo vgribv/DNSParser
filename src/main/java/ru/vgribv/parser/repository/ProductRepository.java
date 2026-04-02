@@ -14,8 +14,7 @@ import java.util.Optional;
 
 @Repository
 public interface ProductRepository extends JpaRepository<Product, Long> {
-    @Modifying
-    @Transactional
+    @Modifying(clearAutomatically = true)
     @Query("DELETE FROM Product p WHERE p.updatedAt < :timestamp")
     void deleteOldProductsInBatch(@Param("timestamp") LocalDateTime timestamp);
 

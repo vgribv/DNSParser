@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 
 @Repository
 public interface PriceHistoryRepository extends JpaRepository<PriceHistory, Long> {
-    @Modifying
+    @Modifying (clearAutomatically = true)
     @Query("DELETE FROM PriceHistory ph WHERE ph.product IN (SELECT p FROM Product p WHERE p.updatedAt < :time)")
     void deleteHistoryForOldProducts(@Param("time") LocalDateTime time);
 }
