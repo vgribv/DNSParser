@@ -4,7 +4,7 @@ services:
     container_name: dns_db
     restart: always
     environment:
-      POSTGRES_DB: dnsparser
+      POSTGRES_DB: dns
       POSTGRES_USER: ${DB_USERNAME}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
