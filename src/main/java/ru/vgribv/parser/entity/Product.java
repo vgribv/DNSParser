@@ -1,9 +1,7 @@
 package ru.vgribv.parser.entity;
 
 import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.ToString;
+import lombok.*;
 
 import java.time.LocalDateTime;
 import java.util.Objects;
@@ -13,11 +11,10 @@ import java.util.Objects;
 @Getter
 @Setter
 @ToString
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Product {
 
-    public Product(){}
-
-    public Product (String linkId, String name, Integer discountPrice, Integer fullPrice, Category category, LocalDateTime updatedAt){
+    public Product(String linkId, String name, Integer discountPrice, Integer fullPrice, Category category, LocalDateTime updatedAt) {
         this.name = name;
         this.discountPrice = discountPrice;
         this.fullPrice = fullPrice;
@@ -49,15 +46,27 @@ public class Product {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    @ManyToOne
+    @JoinColumn(name = "category_id")
+    private Category category;
+
+    @Column(name = "image_url")
+    private String imageUrl;
+
+    private String condition;
+
+    private String appearance;
+
+    private String completeness;
+
+    @Column(name = "type_of_repair")
+    private String typeOfRepair;
+
     @Transient
     private Integer oldDiscountPrice;
 
     @Transient
     private boolean productPurchased = false;
-
-    @ManyToOne
-    @JoinColumn(name = "category_id")
-    private Category category;
 
     @Override
     public boolean equals(Object o) {

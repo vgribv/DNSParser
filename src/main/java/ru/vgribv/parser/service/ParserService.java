@@ -22,6 +22,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import ru.vgribv.parser.dto.DiscountResultDto;
+import ru.vgribv.parser.dto.ProductHtmlDto;
 import ru.vgribv.parser.entity.PriceHistory;
 import ru.vgribv.parser.event.ParsingResultEvent;
 import ru.vgribv.parser.entity.Category;
@@ -225,9 +226,7 @@ public class ParserService {
                 } else if (uniqueCategoryMap.containsKey(categoryId)) {
                     category = uniqueCategoryMap.get(categoryId);
                 } else {
-                    category = new Category();
-                    category.setCategoryId(categoryId);
-                    category.setName(itemData1.get("label").getAsString());
+                    category = new Category(categoryId, itemData1.get("label").getAsString());
                     uniqueCategoryMap.put(categoryId, category);
                 }
 
@@ -256,6 +255,8 @@ public class ParserService {
                     }
                     String realHtml = jsonObject.get("html").getAsString();
                     Document document = Jsoup.parse(realHtml);
+
+                    Map<String, ProductHtmlDto> productHtmlMap = parseProductHtmlDto(document);
 
                     if (!hasNextPage(document)) flag = true;
 
@@ -288,7 +289,6 @@ public class ParserService {
                         Product product;
                         if (!productMap.containsKey(linkId)) {
                             product = new Product(linkId, name, discountPrice, fullPrice, category, time);
-                            product.setCategory(category);
                         } else {
                             product = productMap.get(linkId);
                             product.setName(name);
@@ -296,6 +296,15 @@ public class ParserService {
                             product.setFullPrice(fullPrice);
                             product.setCategory(category);
                             product.setUpdatedAt(time);
+                        }
+
+                        if (productHtmlMap.containsKey(linkId)) {
+                            ProductHtmlDto productHtmlDto = productHtmlMap.get(linkId);
+                            product.setImageUrl(productHtmlDto.getImageUrl());
+                            product.setCondition(productHtmlDto.getCondition());
+                            product.setAppearance(productHtmlDto.getAppearance());
+                            product.setCompleteness(productHtmlDto.getCompleteness());
+                            product.setTypeOfRepair(productHtmlDto.getTypeOfRepair());
                         }
                         productsToSave.add(product);
                     }
@@ -310,7 +319,6 @@ public class ParserService {
             DiscountResultDto result = getDiscountResult(productsToSave, oldPriceMap);
             List<Product> priceHasDecreased = result.discountedProducts();
             List<PriceHistory> priceHistory = result.historyRecords();
-            System.out.println(priceHistory.size());
 
             List<Product> deletedProducts =
                     self.saveParsedDataAndGetDeletedProducts(time, uniqueCategoryMap, productsToSave, priceHistory);
@@ -390,6 +398,43 @@ public class ParserService {
             }
         }
         return new DiscountResultDto(bufferPriceHasDecreased, historyBuffer);
+    }
+
+    private Map<String, ProductHtmlDto> parseProductHtmlDto (Document document){
+        Map<String, ProductHtmlDto>  productHtmlDtoMap = new HashMap<>();
+        Elements products = document.select(".catalog-product");
+        for (Element product : products) {
+            String condition = null;
+            String appearance = null;
+            String completeness = null;
+            String typeOfRepair = null;
+            Elements block = product.select(".catalog-product__reason-text-block");
+            for (Element element : block) {
+                String text = element.text();
+                if (text.contains("Тип товара:")) {
+                    condition = text.replace("Тип товара:", "").trim();
+                    if (condition.isEmpty()) condition = null;
+                } else if (text.contains("Внешний вид:")) {
+                    appearance = text.replace("Внешний вид:", "").trim();
+                    if (appearance.isEmpty()) appearance = null;
+                } else if (text.contains("Комплектация:")) {
+                    completeness = text.replace("Комплектация:", "").trim();
+                    if (completeness.isEmpty()) completeness = null;
+                } else if (text.contains("Тип ремонта:")) {
+                    typeOfRepair = text.replace("Тип ремонта:", "").trim();
+                    if (typeOfRepair.isEmpty()) typeOfRepair = null;
+                }
+            }
+            String linkId = product.attr("data-entity");
+            Element img = product.select("img").first();
+            String imageUrl = (img != null) ? img.attr("data-src") : null;
+            if (imageUrl != null && imageUrl.startsWith("//")) {
+                imageUrl = "https:" + imageUrl;
+            }
+            productHtmlDtoMap.put(linkId,
+                    new ProductHtmlDto(imageUrl, condition, appearance, completeness, typeOfRepair));
+        }
+        return productHtmlDtoMap;
     }
 
     private String getToken(Page page) {

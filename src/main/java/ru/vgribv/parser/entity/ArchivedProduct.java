@@ -15,8 +15,6 @@ import java.util.Objects;
 @ToString
 public class ArchivedProduct {
 
-    public ArchivedProduct(){}
-
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "archived_product_seq_gen")
     @SequenceGenerator(
@@ -43,6 +41,9 @@ public class ArchivedProduct {
     @ManyToOne
     @JoinColumn(name = "category_id")
     private Category category;
+
+    @Column(name = "image_url")
+    private String imageUrl;
 
     @Override
     public boolean equals(Object o) {
