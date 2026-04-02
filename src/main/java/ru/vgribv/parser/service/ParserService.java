@@ -2,6 +2,7 @@ package ru.vgribv.parser.service;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
+import com.microsoft.playwright.options.Proxy;
 import com.microsoft.playwright.options.RequestOptions;
 import com.microsoft.playwright.options.WaitUntilState;
 import jakarta.annotation.PreDestroy;
@@ -62,6 +63,8 @@ public class ParserService {
     private final String linkProductsFilters;
     private final String linkReferer;
     private final String linkAjaxState;
+    private final String hostname;
+    private final int port;
 
     public ParserService(@Lazy ParserService self, ApplicationEventPublisher publisher,
                          ProductRepository productRepository, CategoryRepository categoryRepository,
@@ -71,7 +74,9 @@ public class ParserService {
                          @Value("${dns.link.products.filters}") String linkProductsFilters,
                          @Value("${dns.link.referer}") String linkReferer,
                          @Value("${dns.link.ajax.state}") String linkAjaxState,
-                         PriceHistoryRepository priceHistoryRepository) {
+                         PriceHistoryRepository priceHistoryRepository,
+                         @Value("${proxy.hostname}") String hostname,
+                         @Value("${proxy.port}") int port) {
         this.self = self;
         this.publisher = publisher;
         this.productRepository = productRepository;
@@ -84,12 +89,15 @@ public class ParserService {
         this.linkReferer = linkReferer;
         this.linkAjaxState = linkAjaxState;
         this.priceHistoryRepository = priceHistoryRepository;
+        this.hostname = hostname;
+        this.port = port;
     }
 
     private void initBrowser() {
         this.playwright = Playwright.create();
         this.context = playwright.chromium().launchPersistentContext(userDataDir, new BrowserType.LaunchPersistentContextOptions()
                 .setHeadless(false)
+                .setProxy(new Proxy("http://" + hostname + ":" + port))
                 .setIgnoreDefaultArgs(List.of("--enable-automation"))
                 .setArgs(Arrays.asList(
                         "--no-sandbox",
