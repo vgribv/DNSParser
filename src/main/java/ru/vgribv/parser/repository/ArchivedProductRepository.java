@@ -11,9 +11,11 @@ import java.time.LocalDateTime;
 
 @Repository
 public interface ArchivedProductRepository extends JpaRepository<ArchivedProduct, Long> {
-    @Modifying
-    @Query(value = "INSERT INTO archived_product (link_id, name, discount_price, full_price, category_id, archived_at) " +
-            "SELECT link_id, name, discount_price, full_price, category_id, :now " +
+    @Modifying(clearAutomatically = true)
+    @Query(value = "INSERT INTO archived_product (id, link_id, name, discount_price, full_price, category_id, image_url, archived_at) " +
+            "SELECT nextval('archived_product_sequence'), " +
+            "link_id, name, discount_price, full_price, category_id, image_url, :now " +
             "FROM product WHERE updated_at < :archived_at", nativeQuery = true)
     void archiveOldProducts(@Param("archived_at") LocalDateTime archived_at, @Param("now") LocalDateTime now);
+
 }
