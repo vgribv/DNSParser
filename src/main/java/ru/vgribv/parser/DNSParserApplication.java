@@ -14,13 +14,11 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableRetry
 public class DNSParserApplication {
 	public static void main(String[] args) {
-		String proxyHost = System.getenv("PROXY_HOST") != null ? System.getenv("PROXY_HOST") : "172.17.0.1";
-		String proxyPort = System.getenv("PROXY_PORT") != null ? System.getenv("PROXY_PORT") : "1111";
 
-		System.setProperty("http.proxyHost", proxyHost);
-		System.setProperty("http.proxyPort", proxyPort);
-		System.setProperty("https.proxyHost", proxyHost);
-		System.setProperty("https.proxyPort", proxyPort);
+		System.setProperty("http.proxyHost", "172.17.0.1");
+		System.setProperty("http.proxyPort", "1111");
+		System.setProperty("https.proxyHost", "172.17.0.1");
+		System.setProperty("https.proxyPort", "1111");
 
 		SpringApplication.run(DNSParserApplication.class, args);
 	}
