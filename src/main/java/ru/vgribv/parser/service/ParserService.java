@@ -58,13 +58,11 @@ public class ParserService {
     private final PriceHistoryRepository priceHistoryRepository;
     private Playwright playwright;
     private BrowserContext context;
-    private final Path userDataDir = Paths.get("dns_real_profile");
+    private final Path userDataDir = Paths.get("/home/vgribv/dns_real_profile");
     private final String linkPrefix;
     private final String linkProductsFilters;
     private final String linkReferer;
     private final String linkAjaxState;
-    private final String hostname;
-    private final int port;
 
     public ParserService(@Lazy ParserService self, ApplicationEventPublisher publisher,
                          ProductRepository productRepository, CategoryRepository categoryRepository,
@@ -74,9 +72,7 @@ public class ParserService {
                          @Value("${dns.link.products.filters}") String linkProductsFilters,
                          @Value("${dns.link.referer}") String linkReferer,
                          @Value("${dns.link.ajax.state}") String linkAjaxState,
-                         PriceHistoryRepository priceHistoryRepository,
-                         @Value("${PROXY_HOST:172.17.0.1}") String hostname,
-                         @Value("${PROXY_PORT:1111}") int port) {
+                         PriceHistoryRepository priceHistoryRepository) {
         this.self = self;
         this.publisher = publisher;
         this.productRepository = productRepository;
@@ -89,15 +85,13 @@ public class ParserService {
         this.linkReferer = linkReferer;
         this.linkAjaxState = linkAjaxState;
         this.priceHistoryRepository = priceHistoryRepository;
-        this.hostname = hostname;
-        this.port = port;
     }
 
     private void initBrowser() {
         this.playwright = Playwright.create();
         this.context = playwright.chromium().launchPersistentContext(userDataDir, new BrowserType.LaunchPersistentContextOptions()
                 .setHeadless(false)
-                .setProxy(new Proxy("http://" + hostname + ":" + port))
+                .setExecutablePath(Paths.get("/usr/bin/chromium"))
                 .setIgnoreDefaultArgs(List.of("--enable-automation"))
                 .setArgs(Arrays.asList(
                         "--no-sandbox",
