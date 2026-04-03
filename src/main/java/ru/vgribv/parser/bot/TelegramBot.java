@@ -79,6 +79,9 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
         this.parserService = parserService;
         this.reportService = reportService;
         this.keyboardFactory = keyboardFactory;
+
+        log.info("!!! ТЕЛЕГРАМ-БОТ ЗАПУЩЕН. Используемый клиент: {} !!!",
+                telegramClient.getClass().getSimpleName());
     }
 
     @PostConstruct
