@@ -2,6 +2,7 @@ package ru.vgribv.parser.service;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
+import com.microsoft.playwright.options.Cookie;
 import com.microsoft.playwright.options.Proxy;
 import com.microsoft.playwright.options.RequestOptions;
 import com.microsoft.playwright.options.WaitUntilState;
@@ -65,6 +66,7 @@ public class ParserService {
     private final String linkAjaxState;
     private final String host;
     private final int port;
+    private final String city;
 
     public ParserService(@Lazy ParserService self, ApplicationEventPublisher publisher,
                          ProductRepository productRepository, CategoryRepository categoryRepository,
@@ -75,7 +77,7 @@ public class ParserService {
                          @Value("${dns.link.referer}") String linkReferer,
                          @Value("${dns.link.ajax.state}") String linkAjaxState,
                          PriceHistoryRepository priceHistoryRepository,
-                         @Value("${PROXY_HOST}") String host, @Value("${PROXY_PORT}") int port) {
+                         @Value("${PROXY_HOST}") String host, @Value("${PROXY_PORT}") int port, @Value("${dns.city}") String city) {
         this.self = self;
         this.publisher = publisher;
         this.productRepository = productRepository;
@@ -90,6 +92,7 @@ public class ParserService {
         this.priceHistoryRepository = priceHistoryRepository;
         this.host = host;
         this.port = port;
+        this.city = city;
     }
 
     private void initBrowser() {
@@ -107,6 +110,11 @@ public class ParserService {
                         "--disable-dev-shm-usage"
                 ))
                 .setViewportSize(1280, 720));
+        context.addCookies(List.of(
+                new Cookie("city_path", city)
+                        .setDomain(".dns-shop.ru")
+                        .setPath("/")
+        ));
     }
 
     private void closeBrowser() {
@@ -241,7 +249,6 @@ public class ParserService {
                 int currentPage = 1;
                 boolean flag = false;
                 while (!flag && currentPage < 100) {
-                    showProgress(category.getName(), currentPage);
                     APIResponse response = request.get(linkPrefix + "?category=" + category.getCategoryId() + "&p=" + currentPage++,
                             RequestOptions.create()
                                     .setHeader("X-Requested-With", "XMLHttpRequest")
@@ -275,8 +282,8 @@ public class ParserService {
                     String responseBody = "";
 
                     for (int attempt = 1; attempt <= maxRetries; attempt++) {
+                        showProgress(category.getName(), currentPage - 1);
                         try {
-
                             APIResponse response2 = context.request().post(linkAjaxState,
                                     RequestOptions.create()
                                             .setHeader("Content-Type", "application/x-www-form-urlencoded")
