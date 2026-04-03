@@ -1,7 +1,8 @@
 name: Deploy to Ubuntu
 on:
-  push:
-    branches: [ main ]
+  #push:
+    #branches: [ main ]
+
 
 jobs:
   deploy:
@@ -15,5 +16,6 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           script: |
             cd ~/DNSParser
-            git pull
-            sudo docker-compose up -d --build
+            git reset --hard
+            git pull origin main
+            sudo docker compose up -d --build
