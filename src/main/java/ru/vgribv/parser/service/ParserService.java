@@ -110,11 +110,6 @@ public class ParserService {
                         "--disable-dev-shm-usage"
                 ))
                 .setViewportSize(1280, 720));
-        context.addCookies(List.of(
-                new Cookie("city_path", city)
-                        .setDomain(".dns-shop.ru")
-                        .setPath("/")
-        ));
     }
 
     private void closeBrowser() {
@@ -174,29 +169,9 @@ public class ParserService {
 
             log.info("Этап 2: Загрузка главной страницы...");
             Page page = context.pages().getFirst();
-            log.info("Пытаюсь сменить город вручную через интерфейс...");
-            page.navigate("https://dns-shop.ru");
-            Thread.sleep(5000);
 
-            try {
-                page.locator(".city-select__text_90n").click();
-                Thread.sleep(2000);
+            setCity(page, city);
 
-                page.locator("button._filter_tsa9p_1").click();
-                Thread.sleep(2000);
-                log.info("Клик по Ростову выполнен!");
-
-                Thread.sleep(5000);
-            } catch (Exception e) {
-                log.error("❌ Не удалось кликнуть по городу: {}", e.getMessage());
-            }
-
-            String finalCity = page.locator(".city-select__text_90n").innerText();
-            log.info("!!! ИТОГОВЫЙ ГОРОД: {} !!!", finalCity);
-
-            if (!finalCity.toLowerCase().contains("ростов")) {
-                throw new RuntimeException("ГОРОД НЕ СМЕНИЛСЯ! СТОП ПАРСИНГ!");
-            }
             for (int i = 0; true; i++) {
                 try {
                     page.navigate(linkPrefix + "?p=1",
@@ -561,4 +536,32 @@ public class ParserService {
         log.info("⏳ Обработка категории: [{}] | Страница: {}", categoryName, currentPage);
     }
 
+    private void setCity(Page page, String city) throws InterruptedException {
+        log.info("Пытаюсь сменить город вручную через интерфейс...");
+        page.navigate("https://dns-shop.ru");
+        Thread.sleep(5000);
+
+        try {
+            page.locator(".city-select__text_90n").click();
+            Thread.sleep(2000);
+
+            page.locator("button._filter_tsa9p_1")
+                    .filter(new Locator.FilterOptions().setHasText(city))
+                    .first()
+                    .click();
+            Thread.sleep(2000);
+            log.info("Клик по {} выполнен!", city);
+
+            Thread.sleep(5000);
+        } catch (Exception e) {
+            log.error("❌ Не удалось кликнуть по городу: {}", e.getMessage());
+        }
+
+        String finalCity = page.locator(".city-select__text_90n").innerText();
+        log.info("!!! ИТОГОВЫЙ ГОРОД: {} !!!", finalCity);
+
+        if (!finalCity.toLowerCase().contains(city)) {
+            throw new RuntimeException("ГОРОД НЕ СМЕНИЛСЯ! СТОП ПАРСИНГ!");
+        }
+    }
 }
