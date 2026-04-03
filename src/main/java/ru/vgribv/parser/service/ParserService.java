@@ -179,13 +179,14 @@ public class ParserService {
             Thread.sleep(5000);
 
             try {
-                page.locator(".city-select__text").click();
+                page.locator(".city-select__text_90n").click();
                 Thread.sleep(2000);
 
-                page.locator("input[placeholder='Поиск города']").fill("Ростов-на-Дону");
+                page.locator("span._list-item__title_hh5f0_28")
+                        .filter(new Locator.FilterOptions().setHasText("Ростов-на-Дону"))
+                        .first()
+                        .click();
                 Thread.sleep(2000);
-
-                page.locator(".city-reveal__group-item", new Page.LocatorOptions().setHasText("Ростов-на-Дону")).first().click();
                 log.info("Клик по Ростову выполнен!");
 
                 Thread.sleep(5000);
