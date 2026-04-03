@@ -160,6 +160,7 @@ public class ParserService {
     }
 
     private void parseGoods() {
+
         try {
             Files.createDirectories(Paths.get("data"));
         } catch (IOException e) {
@@ -173,6 +174,31 @@ public class ParserService {
 
             log.info("Этап 2: Загрузка главной страницы...");
             Page page = context.pages().getFirst();
+            log.info("Пытаюсь сменить город вручную через интерфейс...");
+            page.navigate("https://dns-shop.ru");
+            Thread.sleep(5000);
+
+            try {
+                page.locator(".city-select__text").click();
+                Thread.sleep(2000);
+
+                page.locator("input[placeholder='Поиск города']").fill("Ростов-на-Дону");
+                Thread.sleep(2000);
+
+                page.locator(".city-reveal__group-item", new Page.LocatorOptions().setHasText("Ростов-на-Дону")).first().click();
+                log.info("Клик по Ростову выполнен!");
+
+                Thread.sleep(5000);
+            } catch (Exception e) {
+                log.error("❌ Не удалось кликнуть по городу: {}", e.getMessage());
+            }
+
+            String finalCity = page.locator(".city-select__text").innerText();
+            log.info("!!! ИТОГОВЫЙ ГОРОД: {} !!!", finalCity);
+
+            if (!finalCity.toLowerCase().contains("ростов")) {
+                throw new RuntimeException("ГОРОД НЕ СМЕНИЛСЯ! СТОП ПАРСИНГ!");
+            }
             for (int i = 0; true; i++) {
                 try {
                     page.navigate(linkPrefix + "?p=1",
