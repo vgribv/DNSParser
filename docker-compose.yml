@@ -17,6 +17,7 @@ services:
     container_name: dns_bot
     volumes:
       - /home/vgribv/dns_real_profile:/app/dns_real_profile
+      - ./data:/app/data
     network_mode: "host"
     restart: always
     environment:
