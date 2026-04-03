@@ -1,13 +1,17 @@
 FROM mcr.microsoft.com/playwright/java:v1.58.0-noble AS build
 WORKDIR /app
-RUN apt-get update && apt-get install -y openjdk-21-jdk-headless maven
-ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
-ENV PATH="$JAVA_HOME/bin:$PATH"
-COPY . /app
-RUN chmod +x mvnw && ./mvnw clean package -DskipTests
+
+COPY pom.xml .
+COPY .mvn .mvn
+COPY mvnw .
+RUN chmod +x mvnw && ./mvnw dependency:go-offline -B
+
+COPY src ./src
+RUN ./mvnw clean package -DskipTests
 
 FROM mcr.microsoft.com/playwright/java:v1.58.0-noble
 WORKDIR /app
+
 RUN apt-get update && apt-get install -y \
     openjdk-21-jdk-headless \
     maven \
