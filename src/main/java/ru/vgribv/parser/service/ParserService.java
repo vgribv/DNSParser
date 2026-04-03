@@ -271,15 +271,49 @@ public class ParserService {
                     String req = buildPriceRequest(realHtml);
                     String csrfToken = getToken(context.pages().getFirst());
 
-                    APIResponse response2 = context.request().post(linkAjaxState,
-                            RequestOptions.create()
-                                    .setHeader("Content-Type", "application/x-www-form-urlencoded")
-                                    .setHeader("x-csrf-token", csrfToken)
-                                    .setHeader("x-requested-with", "XMLHttpRequest")
-                                    .setHeader("referer", linkReferer)
-                                    .setData("data=" + req));
+                    int maxRetries = 3;
+                    String responseBody = "";
 
-                    JsonObject root = JsonParser.parseString(response2.text()).getAsJsonObject();
+                    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+                        try {
+
+                            APIResponse response2 = context.request().post(linkAjaxState,
+                                    RequestOptions.create()
+                                            .setHeader("Content-Type", "application/x-www-form-urlencoded")
+                                            .setHeader("x-csrf-token", csrfToken)
+                                            .setHeader("x-requested-with", "XMLHttpRequest")
+                                            .setHeader("referer", linkReferer)
+                                            .setData("data=" + req)
+                                            .setTimeout(30000));
+
+                            if (response2.status() == 200) {
+                                responseBody = response2.text();
+                                if (responseBody != null && !responseBody.isEmpty()) {
+                                    break;
+                                }
+                            } else {
+                                log.warn("Попытка {} не удалась. Статус: {}", attempt, response2.status());
+                            }
+                        } catch (Exception e) {
+                            log.error("Ошибка на попытке {}: {}", attempt, e.getMessage());
+                        }
+
+                        if (attempt < maxRetries) {
+                            Thread.sleep(2000L * attempt);
+                        } else {
+                            log.error("!!! Все {} попыток AJAX провалены !!!", maxRetries);
+                            throw new RuntimeException("Парсинг дальше невозможен. Ajax выдал ошибку");
+                        }
+                    }
+                    if (responseBody == null || responseBody.isEmpty()) {
+                        log.error("!!! Все попытки исчерпаны, тело ответа пустое. Пропускаем AJAX. !!!");
+                        throw new RuntimeException("Парсинг дальше невозможен. Ajax выдал ошибку");
+                    }
+                    JsonObject root = JsonParser.parseString(responseBody).getAsJsonObject();
+                    if (!root.has("data") || root.get("data").isJsonNull()) {
+                        log.warn("!!! В ответе AJAX нет поля 'data'. Тело: {}", responseBody);
+                        throw new RuntimeException("Парсинг дальше невозможен. Ajax выдал ошибку");
+                    }
                     JsonArray states = root.getAsJsonObject("data").getAsJsonArray("states");
 
                     for (JsonElement element : states) {
