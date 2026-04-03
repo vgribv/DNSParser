@@ -30,8 +30,4 @@ public class TelegramBotConfig {
         return new OkHttpTelegramClient(botToken);
     }
 
-    @Bean
-    public TelegramBotsLongPollingApplication telegramBotsApplication() {
-        return new TelegramBotsLongPollingApplication();
-    }
 }

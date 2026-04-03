@@ -66,7 +66,7 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
     private final KeyboardFactory  keyboardFactory;
 
     public TelegramBot(@Qualifier("telegramClientWithProxy") TelegramClient telegramClient,
-                       @Value("${BOT_TOKEN}") String botToken,
+                       @Value("${BOT_TOKEN:none}") String botToken,
                        ProductRepository productRepository, TrackerRepository trackerRepository,
                        UserTelegramRepository userTelegramRepository, SearchFilterRepository searchFilterRepository,
                        ParserService parserService, ReportService reportService, KeyboardFactory keyboardFactory) {

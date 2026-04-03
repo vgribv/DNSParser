@@ -75,8 +75,8 @@ public class ParserService {
                          @Value("${dns.link.referer}") String linkReferer,
                          @Value("${dns.link.ajax.state}") String linkAjaxState,
                          PriceHistoryRepository priceHistoryRepository,
-                         @Value("${proxy.hostname}") String hostname,
-                         @Value("${proxy.port}") int port) {
+                         @Value("${PROXY_HOST:172.17.0.1}") String hostname,
+                         @Value("${PROXY_PORT:1111}") int port) {
         this.self = self;
         this.publisher = publisher;
         this.productRepository = productRepository;
@@ -97,7 +97,7 @@ public class ParserService {
         this.playwright = Playwright.create();
         this.context = playwright.chromium().launchPersistentContext(userDataDir, new BrowserType.LaunchPersistentContextOptions()
                 .setHeadless(false)
-                //.setProxy(new Proxy("http://" + hostname + ":" + port))
+                .setProxy(new Proxy("http://" + hostname + ":" + port))
                 .setIgnoreDefaultArgs(List.of("--enable-automation"))
                 .setArgs(Arrays.asList(
                         "--no-sandbox",
