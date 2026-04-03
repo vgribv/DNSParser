@@ -1,5 +1,6 @@
 package ru.vgribv.parser;
 
+import lombok.extern.log4j.Log4j2;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Import;
@@ -13,12 +14,18 @@ import ru.vgribv.parser.config.TelegramBotConfig;
 @EnableAsync
 @EnableRetry
 @Import(TelegramBotConfig.class)
+@Log4j2
 public class DNSParserApplication {
 	public static void main(String[] args) {
-		System.setProperty("http.proxyHost", "127.0.0.1");
-		System.setProperty("http.proxyPort", "1111");
-		System.setProperty("https.proxyHost", "127.0.0.1");
-		System.setProperty("https.proxyPort", "1111");
+		String proxyHost = System.getenv("PROXY_HOST") != null ? System.getenv("PROXY_HOST") : "127.0.0.1";
+		String proxyPort = System.getenv("PROXY_PORT") != null ? System.getenv("PROXY_PORT") : "1111";
+
+		System.setProperty("http.proxyHost", proxyHost);
+		System.setProperty("http.proxyPort", proxyPort);
+		System.setProperty("https.proxyHost", proxyHost);
+		System.setProperty("https.proxyPort", proxyPort);
+		log.info("Proxy Set: {}:{}", proxyHost, proxyPort);
+
 		SpringApplication.run(DNSParserApplication.class, args);
 	}
 }

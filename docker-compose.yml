@@ -13,13 +13,12 @@ services:
       - pgdata:/var/lib/postgresql/data
 
   bot:
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     build: .
     container_name: dns_bot
+    volumes:
+      - /home/vgribv/dns_real_profile:/app/dns_real_profile
+    network_mode: "host"
     restart: always
-    depends_on:
-      - db
     environment:
       SPRING_DATASOURCE_URL: ${DB_URL}
       SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
@@ -31,3 +30,5 @@ services:
 
 volumes:
   pgdata:
+
+

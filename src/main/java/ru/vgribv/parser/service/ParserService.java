@@ -63,6 +63,8 @@ public class ParserService {
     private final String linkProductsFilters;
     private final String linkReferer;
     private final String linkAjaxState;
+    private final String host;
+    private final int port;
 
     public ParserService(@Lazy ParserService self, ApplicationEventPublisher publisher,
                          ProductRepository productRepository, CategoryRepository categoryRepository,
@@ -72,7 +74,8 @@ public class ParserService {
                          @Value("${dns.link.products.filters}") String linkProductsFilters,
                          @Value("${dns.link.referer}") String linkReferer,
                          @Value("${dns.link.ajax.state}") String linkAjaxState,
-                         PriceHistoryRepository priceHistoryRepository) {
+                         PriceHistoryRepository priceHistoryRepository,
+                         @Value("${PROXY_HOST}") String host, @Value("${PROXY_PORT}") int port) {
         this.self = self;
         this.publisher = publisher;
         this.productRepository = productRepository;
@@ -85,12 +88,15 @@ public class ParserService {
         this.linkReferer = linkReferer;
         this.linkAjaxState = linkAjaxState;
         this.priceHistoryRepository = priceHistoryRepository;
+        this.host = host;
+        this.port = port;
     }
 
     private void initBrowser() {
         this.playwright = Playwright.create();
         this.context = playwright.chromium().launchPersistentContext(userDataDir, new BrowserType.LaunchPersistentContextOptions()
                 .setHeadless(false)
+                .setProxy(new Proxy("http://" + host + ":" + port))
                 .setExecutablePath(Paths.get("/usr/bin/chromium"))
                 .setIgnoreDefaultArgs(List.of("--enable-automation"))
                 .setArgs(Arrays.asList(
@@ -487,8 +493,7 @@ public class ParserService {
     }
 
     private void showProgress(String categoryName, int currentPage) {
-        String text = String.format("\r⏳ Категория: %-20s | Страница: %d", categoryName, currentPage);
-        System.out.print(text);
+        log.info("⏳ Обработка категории: [{}] | Страница: {}", categoryName, currentPage);
     }
 
 }
