@@ -182,10 +182,7 @@ public class ParserService {
                 page.locator(".city-select__text_90n").click();
                 Thread.sleep(2000);
 
-                page.locator("span._list-item__title_hh5f0_28")
-                        .filter(new Locator.FilterOptions().setHasText("Ростов-на-Дону"))
-                        .first()
-                        .click();
+                page.locator("button._filter_tsa9p_1").click();
                 Thread.sleep(2000);
                 log.info("Клик по Ростову выполнен!");
 
@@ -194,7 +191,7 @@ public class ParserService {
                 log.error("❌ Не удалось кликнуть по городу: {}", e.getMessage());
             }
 
-            String finalCity = page.locator(".city-select__text").innerText();
+            String finalCity = page.locator(".city-select__text_90n").innerText();
             log.info("!!! ИТОГОВЫЙ ГОРОД: {} !!!", finalCity);
 
             if (!finalCity.toLowerCase().contains("ростов")) {
