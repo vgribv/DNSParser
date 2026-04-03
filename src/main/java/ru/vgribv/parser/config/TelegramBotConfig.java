@@ -29,10 +29,4 @@ public class TelegramBotConfig {
 
         return new OkHttpTelegramClient(client, botToken);
     }
-
-    @Bean
-    public TelegramClient telegramClientWithoutProxy(@Value("${bot.token}") String botToken) {
-        return new OkHttpTelegramClient(botToken);
-    }
-
 }
