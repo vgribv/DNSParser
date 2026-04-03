@@ -170,8 +170,6 @@ public class ParserService {
             log.info("Этап 2: Загрузка главной страницы...");
             Page page = context.pages().getFirst();
 
-            setCity(page, city);
-
             for (int i = 0; true; i++) {
                 try {
                     page.navigate(linkPrefix + "?p=1",
@@ -185,6 +183,12 @@ public class ParserService {
                     if (i == 2) throw new RuntimeException("Финальный провал", e);
                     Thread.sleep(1000);
                 }
+            }
+
+            String cityPage = page.locator(".city-select__text_90n").innerText();
+            log.info("!!! Загрузился город: {} !!!", cityPage);
+            if (!cityPage.toLowerCase().contains(city.toLowerCase())) {
+                setCity(page, city);
             }
 
             APIRequestContext request = context.request();
@@ -536,11 +540,8 @@ public class ParserService {
         log.info("⏳ Обработка категории: [{}] | Страница: {}", categoryName, currentPage);
     }
 
-    private void setCity(Page page, String city) throws InterruptedException {
+    private void setCity(Page page, String city) {
         log.info("Пытаюсь сменить город вручную через интерфейс...");
-        page.navigate("https://dns-shop.ru");
-        Thread.sleep(5000);
-
         try {
             page.locator(".city-select__text_90n").click();
             Thread.sleep(2000);
@@ -560,7 +561,7 @@ public class ParserService {
         String finalCity = page.locator(".city-select__text_90n").innerText();
         log.info("!!! ИТОГОВЫЙ ГОРОД: {} !!!", finalCity);
 
-        if (!finalCity.toLowerCase().contains(city)) {
+        if (!finalCity.toLowerCase().contains(city.toLowerCase())) {
             throw new RuntimeException("ГОРОД НЕ СМЕНИЛСЯ! СТОП ПАРСИНГ!");
         }
     }
