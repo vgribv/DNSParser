@@ -252,20 +252,42 @@ public class ParserService {
                 int currentPage = 1;
                 boolean flag = false;
                 while (!flag && currentPage < 50) {
-                    APIResponse response = request.get(linkPrefix + "?category=" + category.getCategoryId() + "&p=" + currentPage++,
-                            RequestOptions.create()
-                                    .setHeader("X-Requested-With", "XMLHttpRequest")
-                                    .setHeader("Referer", linkReferer));
+                    String rawText = null;
+                    boolean success = false;
+                    int maxRetries = 3;
 
-                    String rawText = response.text();
-                    if (rawText == null || !rawText.trim().startsWith("{")) {
-                        log.warn("❌ Вместо JSON пришло что-то странное в категории {}. Пропускаю...", category.getName());
-                        if (rawText != null) {
-                            log.warn("Raw body: {}", rawText.substring(0, Math.min(rawText.length(), 100)));
+                    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+                        try {
+                            APIResponse response = request.get(linkPrefix + "?category=" + category.getCategoryId() + "&p=" + currentPage,
+                                    RequestOptions.create()
+                                            .setHeader("X-Requested-With", "XMLHttpRequest")
+                                            .setHeader("Referer", linkReferer)
+                                            .setTimeout(30000));
+
+                            if (response.status() == 200) {
+                                rawText = response.text();
+                                success = true;
+                                break;
+                            }
+                            log.warn("⚠️ Попытка {}/{} для стр {} не удалась (Статус: {})", attempt, maxRetries, currentPage, response.status());
+                        } catch (Exception e) {
+                            log.error("❌ Ошибка на попытке {} (стр {}): {}", attempt, currentPage, e.getMessage());
                         }
+                        if (attempt < maxRetries) Thread.sleep(3000L * attempt);
+                    }
+
+                    if (!success || rawText == null) {
+                        log.error("🛑 КРИТИЧЕСКИЙ СБОЙ: Стр {} категории {} не получена!", currentPage, category.getName());
+                        throw new RuntimeException("DNS не ответил после всех попыток.");
+                    }
+
+                    if (!rawText.trim().startsWith("{")) {
+                        log.warn("❌ Вместо JSON пришло что-то странное в категории {}. Пропускаю...", category.getName());
+                        log.warn("Raw body: {}", rawText.substring(0, Math.min(rawText.length(), 100)));
                         break;
                     }
-                    JsonObject jsonObject = JsonParser.parseString(response.text()).getAsJsonObject();
+
+                    JsonObject jsonObject = JsonParser.parseString(rawText).getAsJsonObject();
                     if (!jsonObject.has("html") || jsonObject.get("html").isJsonNull() || jsonObject.get("html").getAsString().isBlank()) {
                         log.warn("В категории '{}' (ID: {}) товары не найдены. Пропускаю...",
                                 category.getName(), category.getCategoryId());
@@ -285,11 +307,10 @@ public class ParserService {
                     String req = buildPriceRequest(realHtml);
                     String csrfToken = getToken(context.pages().getFirst());
 
-                    int maxRetries = 3;
                     String responseBody = "";
 
                     for (int attempt = 1; attempt <= maxRetries; attempt++) {
-                        showProgress(category.getName(), currentPage - 1);
+                        showProgress(category.getName(), currentPage);
                         try {
                             APIResponse response2 = context.request().post(linkAjaxState,
                                     RequestOptions.create()
@@ -365,6 +386,7 @@ public class ParserService {
                         productsToSave.add(product);
                     }
                     Thread.sleep(random.nextInt(100, 500));
+                    currentPage++;
                 }
             }
 
