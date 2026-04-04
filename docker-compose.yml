@@ -29,6 +29,12 @@ services:
       BOT_NAME: ${BOT_NAME}
       PROXY_HOST: ${PROXY_HOST}
       PROXY_PORT: ${PROXY_PORT}
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
 
 volumes:
   pgdata:
