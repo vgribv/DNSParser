@@ -251,7 +251,7 @@ public class ParserService {
 
                 int currentPage = 1;
                 boolean flag = false;
-                while (!flag && currentPage < 100) {
+                while (!flag && currentPage < 50) {
                     APIResponse response = request.get(linkPrefix + "?category=" + category.getCategoryId() + "&p=" + currentPage++,
                             RequestOptions.create()
                                     .setHeader("X-Requested-With", "XMLHttpRequest")
@@ -275,6 +275,10 @@ public class ParserService {
                     Document document = Jsoup.parse(realHtml);
 
                     Map<String, ProductHtmlDto> productHtmlMap = parseProductHtmlDto(document);
+                    if (productHtmlMap.isEmpty()) {
+                        log.info("В категории {} на странице {} товаров больше нет. Выхожу.", category.getName(), currentPage);
+                        break;
+                    }
 
                     if (!hasNextPage(document)) flag = true;
 
