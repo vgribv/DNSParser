@@ -1,14 +1,22 @@
-HELP.md
-target/
-**/dns_real_profile/**
-dns_real_profile/
-dns_real_profile/**
-data/
-.env
-.idea/
-.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
+
+# Java / Maven
+target/
+*.jar
+.mvn/wrapper/maven-wrapper.jar
+
+# Данные мониторинга и БД
+data/
+prometheus_data/
+grafana_data/
+
+#Секреты
+.env
+.env.*
+
+# Playwright
+dns_real_profile/
 
 ### STS ###
 .apt_generated
