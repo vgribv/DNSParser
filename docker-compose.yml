@@ -15,10 +15,11 @@ services:
   bot:
     build: .
     container_name: dns_bot
+    ports:
+      - "8088:8088"
     volumes:
       - /home/vgribv/dns_real_profile:/app/dns_real_profile
       - ./data:/app/data
-    network_mode: "host"
     restart: always
     environment:
       TZ: Europe/Moscow
@@ -36,7 +37,31 @@ services:
         reservations:
           memory: 2G
 
+  prometheus:
+    image: prom/prometheus:v3.11.0
+    container_name: dns_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+
+  grafana:
+    image: grafana/grafana-oss:12.4.2
+    container_name: dns_grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+    depends_on:
+      - prometheus
+
 volumes:
   pgdata:
+  prometheus_data:
+  grafana_data:
 
 
