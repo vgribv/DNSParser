@@ -39,7 +39,8 @@ services:
   prometheus:
     image: prom/prometheus:v3.11.0
     container_name: dns_prometheus
-    network_mode: "host"
+    ports:
+      - "9090:9090"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
@@ -47,7 +48,8 @@ services:
   grafana:
     image: grafana/grafana-oss:12.4.2
     container_name: dns_grafana
-    network_mode: "host"
+    ports:
+      - "3000:3000"
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
