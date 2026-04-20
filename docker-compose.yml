@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     container_name: dns_db
     restart: always
     ports:
@@ -15,12 +15,12 @@ services:
   bot:
     build: .
     container_name: dns_bot
+    restart: always
     ports:
       - "8088:8088"
     volumes:
-      - /home/vgribv/dns_real_profile:/app/dns_real_profile
+      - ${DNS_REAL_PROFILE_PATH}:/app/dns_real_profile
       - ./data:/app/data
-    restart: always
     environment:
       TZ: Europe/Moscow
       SPRING_DATASOURCE_URL: ${DB_URL}
@@ -40,6 +40,7 @@ services:
   prometheus:
     image: prom/prometheus:v3.11.0
     container_name: dns_prometheus
+    restart: always
     ports:
       - "9090:9090"
     volumes:
@@ -49,6 +50,7 @@ services:
   grafana:
     image: grafana/grafana-oss:12.4.2
     container_name: dns_grafana
+    restart: always
     ports:
       - "3000:3000"
     volumes:
