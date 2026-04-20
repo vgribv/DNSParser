@@ -2,12 +2,10 @@ FROM mcr.microsoft.com/playwright/java:v1.58.0-noble AS build
 WORKDIR /app
 
 COPY pom.xml .
-COPY .mvn .mvn
-COPY mvnw .
-RUN chmod +x mvnw && ./mvnw dependency:go-offline -B
+RUN mvn dependency:go-offline -B
 
 COPY src ./src
-RUN ./mvnw clean package -DskipTests
+RUN mvn clean package -DskipTests
 
 FROM mcr.microsoft.com/playwright/java:v1.58.0-noble
 WORKDIR /app
