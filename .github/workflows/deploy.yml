@@ -35,15 +35,12 @@ jobs:
           
           cat <<EOF > docker-compose.override.yml
           services:
-            dns_db:
+            db:
               image: alpine
               entrypoint: ["sh", "-c", "sleep infinity"]
               ports: !reset []
-              network_mode: none
           
-            dns_bot:
-              # Чтобы не было ошибки "neither image nor build", 
-              # мы просто добавляем сеть к уже существующему сервису
+            bot:
               networks:
                 - backend_network
 
@@ -51,7 +48,6 @@ jobs:
             backend_network:
               external: true
               name: backend_network
-          
           EOF
           
           docker compose up -d --build

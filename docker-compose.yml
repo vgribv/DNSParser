@@ -5,6 +5,7 @@ services:
     restart: always
     ports:
       - "5432:5432"
+
     environment:
       POSTGRES_DB: dns
       POSTGRES_USER: ${DB_USERNAME}
@@ -65,5 +66,10 @@ volumes:
   pgdata:
   prometheus_data:
   grafana_data:
+
+networks:
+  backend_network:
+    external: true
+
 
 
