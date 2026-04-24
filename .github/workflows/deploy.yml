@@ -35,12 +35,12 @@ jobs:
           
           cat <<EOF > docker-compose.override.yml
           services:
-            db:
+            dns_db:
               image: alpine
               entrypoint: ["sh", "-c", "sleep infinity"]
               ports: !reset []
           
-            bot:
+            dns_bot:
               networks:
                 - backend_network
                 - default

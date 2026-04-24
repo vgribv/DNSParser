@@ -1,5 +1,5 @@
 services:
-  db:
+  dns_db:
     image: postgres:17-alpine
     container_name: dns_db
     restart: always
@@ -13,7 +13,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
 
-  bot:
+  dns_bot:
     build: .
     container_name: dns_bot
     restart: always
