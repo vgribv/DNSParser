@@ -33,4 +33,12 @@ jobs:
           echo "GRAFANA_PASSWORD=${GRAFANA_PASSWORD}" >> .env
           echo "DNS_REAL_PROFILE_PATH=${DNS_REAL_PROFILE_PATH}" >> .env
           
+          cat <<EOF > docker-compose.override.yml
+          services:
+            db:
+              image: alpine
+              entrypoint: ["sh", "-c", "sleep infinity"]
+              ports: []
+          EOF
+          
           docker compose up -d --build
