@@ -40,6 +40,17 @@ jobs:
               entrypoint: ["sh", "-c", "sleep infinity"]
               ports: !reset []
               network_mode: none
+  
+            dns_bot:
+              environment:
+                - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres_db:5432/dns
+              networks:
+                - backend_network
+  
+          networks:
+            backend_network:
+              external: true
+              name: backend_network
           EOF
           
           docker compose up -d --build
