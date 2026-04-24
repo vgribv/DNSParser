@@ -23,4 +23,14 @@ jobs:
           GRAFANA_PASSWORD: ${{ secrets.GRAFANA_PASSWORD }}
           DNS_REAL_PROFILE_PATH: ${{ secrets.DNS_REAL_PROFILE_PATH }}
         run: |
+          echo "BOT_TOKEN=${BOT_TOKEN}" > .env
+          echo "BOT_NAME=${BOT_NAME}" >> .env
+          echo "DB_URL=${DB_URL}" >> .env
+          echo "DB_USERNAME=${DB_USERNAME}" >> .env
+          echo "DB_PASSWORD=${DB_PASSWORD}" >> .env
+          echo "PROXY_HOST=${PROXY_HOST}" >> .env
+          echo "PROXY_PORT=${PROXY_PORT}" >> .env
+          echo "GRAFANA_PASSWORD=${GRAFANA_PASSWORD}" >> .env
+          echo "DNS_REAL_PROFILE_PATH=${DNS_REAL_PROFILE_PATH}" >> .env
+          
           docker compose up -d --build
