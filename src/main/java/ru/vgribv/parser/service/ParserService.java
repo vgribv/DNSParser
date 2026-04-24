@@ -16,12 +16,14 @@ import com.microsoft.playwright.*;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import ru.vgribv.parser.config.DnsParserProperties;
 import ru.vgribv.parser.dto.DiscountResultDto;
 import ru.vgribv.parser.dto.ProductHtmlDto;
 import ru.vgribv.parser.entity.PriceHistory;
@@ -37,7 +39,6 @@ import com.microsoft.playwright.BrowserType;
 
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -58,29 +59,13 @@ public class ParserService {
     private final PriceHistoryRepository priceHistoryRepository;
     private Playwright playwright;
     private BrowserContext context;
-    private final Path userDataDir;
-    private final String dnsBrowserPath;
-    private final String linkPrefix;
-    private final String linkProductsFilters;
-    private final String linkReferer;
-    private final String linkAjaxState;
-    private final String host;
-    private final int port;
-    private final String city;
+    private final DnsParserProperties properties;
 
     public ParserService(@Lazy ParserService self, ApplicationEventPublisher publisher,
                          ProductRepository productRepository, CategoryRepository categoryRepository,
                          ArchivedProductRepository archivedProductRepository,
                          FileWriteService fileWriteService, @Lazy SendToUserService sendToUserService,
-                         @Value("${dns_real_profile_path}") Path userDataDir,
-                         @Value("${dns.browser.path}") String dnsBrowserPath,
-                         @Value("${dns.link.prefix}") String linkPrefix,
-                         @Value("${dns.link.products.filters}") String linkProductsFilters,
-                         @Value("${dns.link.referer}") String linkReferer,
-                         @Value("${dns.link.ajax.state}") String linkAjaxState,
-                         PriceHistoryRepository priceHistoryRepository,
-                         @Value("${PROXY_HOST:}") String host, @Value("${PROXY_PORT:0}") int port,
-                         @Value("${dns.city:Ростов-на-Дону}") String city) {
+                         PriceHistoryRepository priceHistoryRepository, DnsParserProperties properties) {
         this.self = self;
         this.publisher = publisher;
         this.productRepository = productRepository;
@@ -88,16 +73,8 @@ public class ParserService {
         this.archivedProductRepository = archivedProductRepository;
         this.fileWriteService = fileWriteService;
         this.sendToUserService = sendToUserService;
-        this.userDataDir = userDataDir;
-        this.dnsBrowserPath = dnsBrowserPath;
-        this.linkPrefix = linkPrefix;
-        this.linkProductsFilters = linkProductsFilters;
-        this.linkReferer = linkReferer;
-        this.linkAjaxState = linkAjaxState;
         this.priceHistoryRepository = priceHistoryRepository;
-        this.host = host;
-        this.port = port;
-        this.city = city;
+        this.properties = properties;
     }
 
     private void initBrowser() {
@@ -116,15 +93,18 @@ public class ParserService {
                 ))
                 .setViewportSize(1280, 720);
 
+        String host = properties.getProxy().getHost();
+        int port = properties.getProxy().getPort();
+
         if (port > 0 && host != null && !host.isEmpty() && !host.equals("none")) {
             options.setProxy(new Proxy("http://" + host + ":" + port));
         }
 
         if (!isWindows) {
-            options.setExecutablePath(Paths.get(dnsBrowserPath));
+            options.setExecutablePath(Paths.get(properties.getBrowserPath()));
         }
 
-        this.context = this.playwright.chromium().launchPersistentContext(userDataDir, options);
+        this.context = this.playwright.chromium().launchPersistentContext(Paths.get(properties.getRealProfilePath()), options);
     }
 
     private void closeBrowser() {
@@ -141,7 +121,7 @@ public class ParserService {
         closeBrowser();
     }
 
-    @Scheduled(cron = "0 0 8-20 * * *")
+    @Scheduled(cron = "${dns.cron}")
     public void scheduledRun() {
         if (running.compareAndSet(false, true)) {
             self.executeAsync();
@@ -185,40 +165,42 @@ public class ParserService {
             log.info("Этап 2: Загрузка главной страницы...");
             Page page = context.pages().getFirst();
 
-            for (int i = 0; true; i++) {
-                try {
-                    page.navigate(linkPrefix + "?p=1",
-                            new Page.NavigateOptions()
-                                    .setWaitUntil(WaitUntilState.DOMCONTENTLOADED)
-                                    .setTimeout(60000));
-                    page.waitForSelector(".product-buy__price");
-                    break;
-                } catch (Exception e) {
-                    log.error("Попытка {} не удалась: {}", i, e.getMessage(), e);
-                    if (i == 2) throw new RuntimeException("Финальный провал", e);
-                    Thread.sleep(1000);
-                }
+            String referer = properties.getLink().getReferer();
+            String prefix = properties.getLink().getPrefix();
+
+            try {
+                self.navigateToPage(page, prefix + "?p=1");
+            } catch (Exception e) {
+                log.error("Все попытки загрузки провалены: {}", e.getMessage());
+                throw new RuntimeException("Финальный провал после retry", e);
             }
 
             String cityPage = page.locator(".city-select__text_90n").innerText();
             log.info("!!! Загрузился город: {} !!!", cityPage);
+            String city = properties.getCity();
             if (!cityPage.toLowerCase().contains(city.toLowerCase())) {
                 setCity(page, city);
             }
 
             APIRequestContext request = context.request();
-            APIResponse response3 = request.get(linkProductsFilters,
-                    RequestOptions.create()
-                            .setHeader("X-Requested-With", "XMLHttpRequest")
-                            .setHeader("Referer", linkReferer)
-            );
-            String contentType = response3.headers().get("content-type");
-            if (response3.status() != 200 || contentType == null || !contentType.contains("application/json")) {
-                log.error("⚠️ DNS вернул ошибку или HTML вместо данных. Статус: {}. Тип контента: {}", response3.status(), contentType);
+
+            APIResponse responseGetCategories;
+            try {
+                responseGetCategories = self.getResponse(request, properties.getLink().getProductsFilters() + "?p=1", RequestOptions.create()
+                        .setHeader("X-Requested-With", "XMLHttpRequest")
+                        .setHeader("Referer", referer));
+            } catch (RuntimeException e) {
+                log.error("🛑 КРИТИЧЕСКИЙ СБОЙ: категории не получены!");
+                throw new RuntimeException("DNS не ответил после всех попыток.");
+            }
+
+            String contentType = responseGetCategories.headers().get("content-type");
+            if (responseGetCategories.status() != 200 || contentType == null || !contentType.contains("application/json")) {
+                log.error("⚠️ DNS вернул ошибку или HTML вместо данных. Статус: {}. Тип контента: {}", responseGetCategories.status(), contentType);
                 throw new RuntimeException("Неожиданный тип контента. Возможно, сработал анти-фрод");
             }
 
-            String body = response3.text();
+            String body = responseGetCategories.text();
             if (body == null || body.isBlank() || !body.trim().startsWith("{")) {
                 String snippet = (body != null && body.length() > 200) ? body.substring(0, 200) : body;
                 log.error("⚠️ Получен некорректный ответ от DNS (не JSON). Фрагмент ответа: \n{}", snippet);
@@ -267,31 +249,15 @@ public class ParserService {
                 int currentPage = 1;
                 boolean flag = false;
                 while (!flag && currentPage < 50) {
-                    String rawText = null;
-                    boolean success = false;
-                    int maxRetries = 3;
-
-                    for (int attempt = 1; attempt <= maxRetries; attempt++) {
-                        try {
-                            APIResponse response = request.get(linkPrefix + "?category=" + category.getCategoryId() + "&p=" + currentPage,
-                                    RequestOptions.create()
-                                            .setHeader("X-Requested-With", "XMLHttpRequest")
-                                            .setHeader("Referer", linkReferer)
-                                            .setTimeout(30000));
-
-                            if (response.status() == 200) {
-                                rawText = response.text();
-                                success = true;
-                                break;
-                            }
-                            log.warn("⚠️ Попытка {}/{} для стр {} не удалась (Статус: {})", attempt, maxRetries, currentPage, response.status());
-                        } catch (Exception e) {
-                            log.error("❌ Ошибка на попытке {} (стр {}): {}", attempt, currentPage, e.getMessage());
-                        }
-                        if (attempt < maxRetries) Thread.sleep(3000L * attempt);
-                    }
-
-                    if (!success || rawText == null) {
+                    String rawText;
+                    APIResponse responseGetPage;
+                    try {
+                        responseGetPage = self.getResponse(request, prefix + "?category=" + category.getCategoryId() + "&p=" + currentPage, RequestOptions.create()
+                                .setHeader("X-Requested-With", "XMLHttpRequest")
+                                .setHeader("Referer", referer)
+                                .setTimeout(30000));
+                        rawText = responseGetPage.text();
+                    } catch (RuntimeException e) {
                         log.error("🛑 КРИТИЧЕСКИЙ СБОЙ: Стр {} категории {} не получена!", currentPage, category.getName());
                         throw new RuntimeException("DNS не ответил после всех попыток.");
                     }
@@ -322,43 +288,22 @@ public class ParserService {
                     String req = buildPriceRequest(realHtml);
                     String csrfToken = getToken(context.pages().getFirst());
 
-                    String responseBody = "";
+                    String responseBody;
 
-                    for (int attempt = 1; attempt <= maxRetries; attempt++) {
-                        showProgress(category.getName(), currentPage);
-                        try {
-                            APIResponse response2 = context.request().post(linkAjaxState,
-                                    RequestOptions.create()
-                                            .setHeader("Content-Type", "application/x-www-form-urlencoded")
-                                            .setHeader("x-csrf-token", csrfToken)
-                                            .setHeader("x-requested-with", "XMLHttpRequest")
-                                            .setHeader("referer", linkReferer)
-                                            .setData("data=" + req)
-                                            .setTimeout(30000));
-
-                            if (response2.status() == 200) {
-                                responseBody = response2.text();
-                                if (responseBody != null && !responseBody.isEmpty()) {
-                                    break;
-                                }
-                            } else {
-                                log.warn("Попытка {} не удалась. Статус: {}", attempt, response2.status());
-                            }
-                        } catch (Exception e) {
-                            log.error("Ошибка на попытке {}: {}", attempt, e.getMessage());
-                        }
-
-                        if (attempt < maxRetries) {
-                            Thread.sleep(2000L * attempt);
-                        } else {
-                            log.error("!!! Все {} попыток AJAX провалены !!!", maxRetries);
-                            throw new RuntimeException("Парсинг дальше невозможен. Ajax выдал ошибку");
-                        }
-                    }
-                    if (responseBody == null || responseBody.isEmpty()) {
-                        log.error("!!! Все попытки исчерпаны, тело ответа пустое. Пропускаем AJAX. !!!");
+                    showProgress(category.getName(), currentPage);
+                    try {
+                        APIResponse responseGetAjax = self.getResponse(request, properties.getLink().getAjaxState() + "?p=" + currentPage, RequestOptions.create()
+                                .setHeader("Content-Type", "application/x-www-form-urlencoded")
+                                .setHeader("x-csrf-token", csrfToken)
+                                .setHeader("x-requested-with", "XMLHttpRequest")
+                                .setHeader("referer", referer)
+                                .setData("data=" + req)
+                                .setTimeout(30000));
+                        responseBody = responseGetAjax.text();
+                    } catch (RuntimeException e) {
                         throw new RuntimeException("Парсинг дальше невозможен. Ajax выдал ошибку");
                     }
+
                     JsonObject root = JsonParser.parseString(responseBody).getAsJsonObject();
                     if (!root.has("data") || root.get("data").isJsonNull()) {
                         log.warn("!!! В ответе AJAX нет поля 'data'. Тело: {}", responseBody);
@@ -493,8 +438,8 @@ public class ParserService {
         return new DiscountResultDto(bufferPriceHasDecreased, historyBuffer);
     }
 
-    private Map<String, ProductHtmlDto> parseProductHtmlDto (Document document){
-        Map<String, ProductHtmlDto>  productHtmlDtoMap = new HashMap<>();
+    private Map<String, ProductHtmlDto> parseProductHtmlDto(Document document) {
+        Map<String, ProductHtmlDto> productHtmlDtoMap = new HashMap<>();
         Elements products = document.select(".catalog-product");
         for (Element product : products) {
             String condition = null;
@@ -605,5 +550,33 @@ public class ParserService {
         if (!finalCity.toLowerCase().contains(city.toLowerCase())) {
             throw new RuntimeException("ГОРОД НЕ СМЕНИЛСЯ! СТОП ПАРСИНГ!");
         }
+    }
+
+    @Retryable(
+            retryFor = {Exception.class},
+            maxAttemptsExpression = "${dns.retry.max-attempts:3}",
+            backoff = @Backoff(delayExpression = "${dns.retry.backoff-delay:1000}")
+    )
+    public void navigateToPage(Page page, String url) {
+        log.info("Пытаюсь загрузить страницу...");
+        page.navigate(url, new Page.NavigateOptions()
+                .setWaitUntil(WaitUntilState.DOMCONTENTLOADED)
+                .setTimeout(60000));
+        page.waitForSelector(".product-buy__price");
+    }
+
+
+    @Retryable(
+            retryFor = {Exception.class},
+            maxAttemptsExpression = "${dns.retry.max-attempts:3}",
+            backoff = @Backoff(delayExpression = "${dns.retry.backoff-delay:1000}")
+    )
+    public APIResponse getResponse(APIRequestContext request, String url, RequestOptions requestOptions) {
+        APIResponse response = request.get(url, requestOptions);
+        if (response.status() != 200) {
+            log.warn("DNS вернул {}. Запускаю ретрай...", response.status());
+            throw new RuntimeException("DNS error: " + response.status());
+        }
+        return response;
     }
 }
