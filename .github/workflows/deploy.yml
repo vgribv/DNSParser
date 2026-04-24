@@ -2,7 +2,7 @@ name: Deploy to Home Xubuntu
 
 on:
   push:
-    branches: [ "feat-virtual-threads-metrics" ]
+    branches: [ "main" ]
 
 jobs:
   deploy:
