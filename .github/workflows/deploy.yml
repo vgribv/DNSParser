@@ -52,4 +52,6 @@ jobs:
               external: true
               name: backend_network
           
+          EOF
+          
           docker compose up -d --build
