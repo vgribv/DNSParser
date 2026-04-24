@@ -2,7 +2,6 @@ package ru.vgribv.parser.service;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
-import com.microsoft.playwright.options.Cookie;
 import com.microsoft.playwright.options.Proxy;
 import com.microsoft.playwright.options.RequestOptions;
 import com.microsoft.playwright.options.WaitUntilState;
@@ -59,7 +58,8 @@ public class ParserService {
     private final PriceHistoryRepository priceHistoryRepository;
     private Playwright playwright;
     private BrowserContext context;
-    private final Path userDataDir = Paths.get("/home/vgribv/dns_real_profile");
+    private final Path userDataDir;
+    private final String dnsBrowserPath;
     private final String linkPrefix;
     private final String linkProductsFilters;
     private final String linkReferer;
@@ -72,12 +72,15 @@ public class ParserService {
                          ProductRepository productRepository, CategoryRepository categoryRepository,
                          ArchivedProductRepository archivedProductRepository,
                          FileWriteService fileWriteService, @Lazy SendToUserService sendToUserService,
+                         @Value("${dns_real_profile_path}") Path userDataDir,
+                         @Value("${dns.browser.path}") String dnsBrowserPath,
                          @Value("${dns.link.prefix}") String linkPrefix,
                          @Value("${dns.link.products.filters}") String linkProductsFilters,
                          @Value("${dns.link.referer}") String linkReferer,
                          @Value("${dns.link.ajax.state}") String linkAjaxState,
                          PriceHistoryRepository priceHistoryRepository,
-                         @Value("${PROXY_HOST}") String host, @Value("${PROXY_PORT}") int port, @Value("${dns.city}") String city) {
+                         @Value("${PROXY_HOST:}") String host, @Value("${PROXY_PORT:0}") int port,
+                         @Value("${dns.city:Ростов-на-Дону}") String city) {
         this.self = self;
         this.publisher = publisher;
         this.productRepository = productRepository;
@@ -85,6 +88,8 @@ public class ParserService {
         this.archivedProductRepository = archivedProductRepository;
         this.fileWriteService = fileWriteService;
         this.sendToUserService = sendToUserService;
+        this.userDataDir = userDataDir;
+        this.dnsBrowserPath = dnsBrowserPath;
         this.linkPrefix = linkPrefix;
         this.linkProductsFilters = linkProductsFilters;
         this.linkReferer = linkReferer;
@@ -97,10 +102,10 @@ public class ParserService {
 
     private void initBrowser() {
         this.playwright = Playwright.create();
-        this.context = playwright.chromium().launchPersistentContext(userDataDir, new BrowserType.LaunchPersistentContextOptions()
+        boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
+
+        var options = new BrowserType.LaunchPersistentContextOptions()
                 .setHeadless(false)
-                .setProxy(new Proxy("http://" + host + ":" + port))
-                .setExecutablePath(Paths.get("/usr/bin/chromium"))
                 .setIgnoreDefaultArgs(List.of("--enable-automation"))
                 .setArgs(Arrays.asList(
                         "--no-sandbox",
@@ -109,7 +114,17 @@ public class ParserService {
                         "--disable-ipv6",
                         "--disable-dev-shm-usage"
                 ))
-                .setViewportSize(1280, 720));
+                .setViewportSize(1280, 720);
+
+        if (port > 0 && host != null && !host.isEmpty() && !host.equals("none")) {
+            options.setProxy(new Proxy("http://" + host + ":" + port));
+        }
+
+        if (!isWindows) {
+            options.setExecutablePath(Paths.get(dnsBrowserPath));
+        }
+
+        this.context = this.playwright.chromium().launchPersistentContext(userDataDir, options);
     }
 
     private void closeBrowser() {

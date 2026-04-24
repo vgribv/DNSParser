@@ -27,7 +27,11 @@ public class DNSParserApplication {
 			System.setProperty("https.proxyPort", proxyPort);
 			log.info("Proxy enabled and set to: {}:{}", proxyHost, proxyPort);
 		} else {
-			log.info("Proxy is disabled. Using direct connection (or system VPN).");
+			log.info("Proxy is disabled. Using direct connection.");
+			System.clearProperty("http.proxyHost");
+			System.clearProperty("http.proxyPort");
+			System.clearProperty("https.proxyHost");
+			System.clearProperty("https.proxyPort");
 		}
 
 		SpringApplication.run(DNSParserApplication.class, args);
