@@ -12,8 +12,8 @@ import javax.management.ObjectName;
 public class MetricsConfig {
 
     @Bean
-    public void registerVirtualThreadMetrics(MeterRegistry registry) {
-        Gauge.builder("jvm.threads.virtual.count", this::getJmxValue)
+    public Gauge registerVirtualThreadMetrics(MeterRegistry registry) {
+        return Gauge.builder("jvm.threads.virtual.count", this::getJmxValue)
                 .description("Current number of virtual threads")
                 .register(registry);
     }
