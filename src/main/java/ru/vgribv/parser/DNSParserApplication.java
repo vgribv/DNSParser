@@ -17,14 +17,18 @@ import ru.vgribv.parser.config.TelegramBotConfig;
 @Log4j2
 public class DNSParserApplication {
 	public static void main(String[] args) {
-		String proxyHost = System.getenv("PROXY_HOST") != null ? System.getenv("PROXY_HOST") : "127.0.0.1";
-		String proxyPort = System.getenv("PROXY_PORT") != null ? System.getenv("PROXY_PORT") : "1111";
+		String proxyHost = System.getenv("PROXY_HOST");
+		String proxyPort = System.getenv("PROXY_PORT");
 
-		System.setProperty("http.proxyHost", proxyHost);
-		System.setProperty("http.proxyPort", proxyPort);
-		System.setProperty("https.proxyHost", proxyHost);
-		System.setProperty("https.proxyPort", proxyPort);
-		log.info("Proxy Set: {}:{}", proxyHost, proxyPort);
+		if (proxyHost != null && !proxyHost.isEmpty() && proxyPort != null && !proxyPort.isEmpty()) {
+			System.setProperty("http.proxyHost", proxyHost);
+			System.setProperty("http.proxyPort", proxyPort);
+			System.setProperty("https.proxyHost", proxyHost);
+			System.setProperty("https.proxyPort", proxyPort);
+			log.info("Proxy enabled and set to: {}:{}", proxyHost, proxyPort);
+		} else {
+			log.info("Proxy is disabled. Using direct connection (or system VPN).");
+		}
 
 		SpringApplication.run(DNSParserApplication.class, args);
 	}

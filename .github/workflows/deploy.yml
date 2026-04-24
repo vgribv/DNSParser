@@ -12,5 +12,15 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build and Deploy
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          BOT_NAME: ${{ secrets.BOT_NAME }}
+          DB_URL: ${{ secrets.DB_URL }}
+          DB_USERNAME: ${{ secrets.DB_USERNAME }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          PROXY_HOST: ${{ secrets.PROXY_HOST }}
+          PROXY_PORT: ${{ secrets.PROXY_PORT }}
+          GRAFANA_PASSWORD: ${{ secrets.GRAFANA_PASSWORD }}
+          DNS_REAL_PROFILE_PATH: ${{ secrets.DNS_REAL_PROFILE_PATH }}
         run: |
           docker compose up -d --build
