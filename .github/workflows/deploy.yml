@@ -31,7 +31,6 @@ jobs:
           echo "PROXY_HOST=${PROXY_HOST}" >> .env
           echo "PROXY_PORT=${PROXY_PORT}" >> .env
           echo "GRAFANA_PASSWORD=${GRAFANA_PASSWORD}" >> .env
-          echo "DNS_REAL_PROFILE_PATH=${DNS_REAL_PROFILE_PATH}" >> .env
           
           cat <<EOF > docker-compose.override.yml
           services:

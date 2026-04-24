@@ -20,7 +20,7 @@ services:
     ports:
       - "8088:8088"
     volumes:
-      - ${DNS_REAL_PROFILE_PATH}:/app/dns_real_profile
+      - ${DNS_REAL_PROFILE_PATH:-./data/browser_profile}:/app/dns_real_profile
       - ./data:/app/data
     environment:
       TZ: Europe/Moscow
