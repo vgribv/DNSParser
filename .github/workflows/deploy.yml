@@ -2,7 +2,7 @@ name: Deploy to Home Xubuntu
 
 on:
   push:
-    branches: [ "fix-deploy" ]
+    branches: [ "main" ]
 
 jobs:
   deploy:
