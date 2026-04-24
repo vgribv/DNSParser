@@ -16,9 +16,6 @@ grafana_data/
 .env.*
 !.env.example
 
-# Playwright
-dns_real_profile/
-
 ### STS ###
 .apt_generated
 .classpath
