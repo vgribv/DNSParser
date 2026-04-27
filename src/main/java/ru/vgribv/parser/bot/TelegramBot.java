@@ -1,8 +1,6 @@
 package ru.vgribv.parser.bot;
 
-import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
@@ -20,27 +18,24 @@ import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageTe
 import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
 import org.telegram.telegrambots.meta.api.objects.InputFile;
 import org.telegram.telegrambots.meta.api.objects.Update;
-import org.telegram.telegrambots.meta.api.objects.User;
 import org.telegram.telegrambots.meta.api.objects.message.Message;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
+import ru.vgribv.parser.bot.command.CommandContainer;
 import ru.vgribv.parser.entity.Tracker;
 import ru.vgribv.parser.entity.SearchFilter;
-import ru.vgribv.parser.entity.UserTelegram;
 import ru.vgribv.parser.entity.Product;
 import ru.vgribv.parser.entity.Category;
 import ru.vgribv.parser.repository.ProductRepository;
 import ru.vgribv.parser.repository.SearchFilterRepository;
 import ru.vgribv.parser.repository.TrackerRepository;
-import ru.vgribv.parser.repository.UserTelegramRepository;
 import ru.vgribv.parser.service.ParserService;
 import ru.vgribv.parser.service.ReportService;
 
 import java.io.File;
 import java.io.Serializable;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
 @Component
@@ -51,9 +46,7 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
     private final String botToken;
     private final ProductRepository productRepository;
     private final TrackerRepository trackerRepository;
-    private final UserTelegramRepository userTelegramRepository;
     private final SearchFilterRepository searchFilterRepository;
-    private final Set<Long> activeUsersCache = ConcurrentHashMap.newKeySet();
     private final Map<Long, String> userState = new HashMap<>();
     private final Map<Long, Integer> userMessageIdTemp = new HashMap<>();
     private final Map<Long, DeleteMessage> userStateMessage = new HashMap<>();
@@ -64,28 +57,23 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
     private final ParserService parserService;
     private final ReportService reportService;
     private final KeyboardFactory  keyboardFactory;
+    private final CommandContainer commandContainer;
 
     public TelegramBot(TelegramClient telegramClient,
                        @Value("${BOT_TOKEN:none}") String botToken,
                        ProductRepository productRepository, TrackerRepository trackerRepository,
-                       UserTelegramRepository userTelegramRepository, SearchFilterRepository searchFilterRepository,
-                       ParserService parserService, ReportService reportService, KeyboardFactory keyboardFactory) {
+                       SearchFilterRepository searchFilterRepository, ParserService parserService,
+                       ReportService reportService, KeyboardFactory keyboardFactory,
+                       CommandContainer commandContainer) {
         this.telegramClient = telegramClient;
         this.botToken = botToken;
         this.productRepository = productRepository;
         this.trackerRepository = trackerRepository;
-        this.userTelegramRepository = userTelegramRepository;
         this.searchFilterRepository = searchFilterRepository;
         this.parserService = parserService;
         this.reportService = reportService;
         this.keyboardFactory = keyboardFactory;
-    }
-
-    @PostConstruct
-    public void loadCache() {
-        List<Long> ids = userTelegramRepository.findAllIds();
-        activeUsersCache.addAll(ids);
-        log.info("Загружено {} пользователей в кэш", activeUsersCache.size());
+        this.commandContainer = commandContainer;
     }
 
     @Override
@@ -103,18 +91,9 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
         if (update.hasMessage() && update.getMessage().hasText()) {
             String messageText = update.getMessage().getText();
             long chatId = update.getMessage().getChatId();
-            if (isUserNotAuthorized(chatId) && !messageText.equals("/start")) {
-                sendMessageText(chatId, "⚠️ Нажмите /start для регистрации.");
-                return;
-            } else if (messageText.equals("/start")) {
-                if (isUserNotAuthorized(chatId)) {
-                    User from = update.getMessage().getFrom();
-                    registerUser(chatId, from.getFirstName());
-                    log.info("Зарегистрирован новый пользователь: {}", from.getFirstName());
-                }
-                menuReply(chatId);
-                return;
-            }
+
+            commandContainer.retrieveCommand(messageText).execute(update);
+
             DeleteMessage deleteMessageReply = DeleteMessage.builder()
                     .chatId(chatId)
                     .messageId(update.getMessage().getMessageId())
@@ -452,7 +431,7 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
                 .build());
     }
 
-    private void menuReply(long chatId) {
+    public void menuReply(long chatId) {
         executeMessage(keyboardFactory.mainMenuReply(chatId));
     }
 
@@ -529,15 +508,6 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
         } catch (TelegramApiException e) {
             log.error("Ошибка при отправки фото: {}", e.getMessage());
         }
-    }
-
-    private boolean isUserNotAuthorized(long chatId) {
-        return !activeUsersCache.contains(chatId);
-    }
-
-    private void registerUser(long chatId, String name) {
-        userTelegramRepository.save(new UserTelegram(chatId, name));
-        activeUsersCache.add(chatId);
     }
 
     private void deleteMessage(long chatId, Integer messageId) {
