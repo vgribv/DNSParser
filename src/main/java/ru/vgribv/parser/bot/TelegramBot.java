@@ -1,8 +1,9 @@
 package ru.vgribv.parser.bot;
 
+import lombok.Getter;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.longpolling.interfaces.LongPollingUpdateConsumer;
 import org.telegram.telegrambots.longpolling.starter.SpringLongPollingBot;
@@ -22,6 +23,7 @@ import org.telegram.telegrambots.meta.api.objects.message.Message;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
+import ru.vgribv.parser.bot.callback.CallbackContainer;
 import ru.vgribv.parser.bot.command.CommandContainer;
 import ru.vgribv.parser.entity.Tracker;
 import ru.vgribv.parser.entity.SearchFilter;
@@ -30,12 +32,14 @@ import ru.vgribv.parser.entity.Category;
 import ru.vgribv.parser.repository.ProductRepository;
 import ru.vgribv.parser.repository.SearchFilterRepository;
 import ru.vgribv.parser.repository.TrackerRepository;
-import ru.vgribv.parser.service.ParserService;
 import ru.vgribv.parser.service.ReportService;
 
 import java.io.File;
+import java.io.InputStream;
 import java.io.Serializable;
+import java.net.URI;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
 @Component
@@ -50,30 +54,31 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
     private final Map<Long, String> userState = new HashMap<>();
     private final Map<Long, Integer> userMessageIdTemp = new HashMap<>();
     private final Map<Long, DeleteMessage> userStateMessage = new HashMap<>();
+    @Getter
     private final Map<Long, SearchFilter> tempFilterValues = new HashMap<>();
     private final Map<Long, Tracker> tempTrackerValues = new HashMap<>();
-    private final Map<Long, Integer> userPages = new HashMap<>();
-    @Lazy
-    private final ParserService parserService;
+    @Getter
+    private final Map<Long, Integer> userPages = new ConcurrentHashMap<>();
     private final ReportService reportService;
     private final KeyboardFactory  keyboardFactory;
     private final CommandContainer commandContainer;
+    private final CallbackContainer callbackContainer;
 
     public TelegramBot(TelegramClient telegramClient,
                        @Value("${BOT_TOKEN:none}") String botToken,
                        ProductRepository productRepository, TrackerRepository trackerRepository,
-                       SearchFilterRepository searchFilterRepository, ParserService parserService,
-                       ReportService reportService, KeyboardFactory keyboardFactory,
-                       CommandContainer commandContainer) {
+                       SearchFilterRepository searchFilterRepository, ReportService reportService,
+                       KeyboardFactory keyboardFactory, CommandContainer commandContainer,
+                       CallbackContainer callbackContainer) {
         this.telegramClient = telegramClient;
         this.botToken = botToken;
         this.productRepository = productRepository;
         this.trackerRepository = trackerRepository;
         this.searchFilterRepository = searchFilterRepository;
-        this.parserService = parserService;
         this.reportService = reportService;
         this.keyboardFactory = keyboardFactory;
         this.commandContainer = commandContainer;
+        this.callbackContainer = callbackContainer;
     }
 
     @Override
@@ -86,6 +91,7 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
         return this;
     }
 
+    @SneakyThrows
     @Override
     public void consume(Update update) {
         if (update.hasMessage() && update.getMessage().hasText()) {
@@ -94,10 +100,6 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
 
             commandContainer.retrieveCommand(messageText).execute(update);
 
-            DeleteMessage deleteMessageReply = DeleteMessage.builder()
-                    .chatId(chatId)
-                    .messageId(update.getMessage().getMessageId())
-                    .build();
 
             if (userState.containsKey(chatId)) {
                 String state = userState.get(chatId);
@@ -191,51 +193,17 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
                 }
             }
 
-            switch (messageText) {
-                case "/menu" -> menuReply(chatId);
-
-                case "Все товары" -> {
-                    menuAllGoods(chatId);
-                    executeMessage(deleteMessageReply);
-                }
-
-                case "Фильтры" -> {
-                    userPages.put(chatId, 0);
-                    menuFilters(chatId);
-                    executeMessage(deleteMessageReply);
-                }
-
-                case "Отследить" -> {
-                    userPages.put(chatId, 0);
-                    menuTrack(chatId);
-                    executeMessage(deleteMessageReply);
-                }
-
-                case "Парсинг" -> parserService.manualRun().ifPresentOrElse(p ->
-                                sendMessageText(chatId, "✅ Парсинг успешно запущен."),
-                        () -> sendMessageText(chatId, "⏳ Ошибка: Задача уже выполняется."));
-
-                case "Назад" -> {
-                    menuReply(chatId);
-                    executeMessage(deleteMessageReply);
-                }
-            }
-
         } else if (update.hasCallbackQuery()) {
             CallbackQuery callback = update.getCallbackQuery();
+
+            String callbackId = update.getCallbackQuery().getData().split("_")[0];
+            callbackContainer.retrieveCallback(callbackId).execute(update);
+
             String callData = callback.getData();
             long chatId = callback.getMessage().getChatId();
             Integer messageId = callback.getMessage().getMessageId();
 
-            if (callData.startsWith("editFilter_")) {
-                SearchFilter searchFilter = searchFilterRepository
-                        .getFirstById(Long.parseLong(callData.split("_")[1]));
-
-                editMenu(chatId, messageId, "Редактировать фильтр",
-                        keyboardFactory.editFilterMenu(searchFilter, true));
-                tempFilterValues.put(chatId, searchFilter);
-
-            } else if (callData.startsWith("filterPage_")) {
+            if (callData.startsWith("filterPage_")) {
                 List<SearchFilter> searchFilters = searchFilterRepository.getAllByChatId(chatId);
                 int currentPage = Integer.parseInt(callData.split("_")[1]);
                 userPages.put(chatId, currentPage);
@@ -275,15 +243,20 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
                         },
                         () -> sendMessageText(chatId, "Ошибка. Попробуйте еще раз."));
 
-                InputFile file = new InputFile(imgUrl.get());
-                SendPhoto sendPhoto = SendPhoto.builder()
-                        .chatId(chatId)
-                        .caption(sb.toString())
-                        .photo(file)
-                        .parseMode(ParseMode.HTML)
-                        .replyMarkup(keyboardFactory.editTrackerMenu(link))
-                        .build();
-                sendPhoto(sendPhoto);
+                try (InputStream is = URI.create(imgUrl.get()).toURL().openStream()) {
+                    InputFile file = new InputFile(is, "image.jpg");
+
+                    SendPhoto sendPhoto = SendPhoto.builder()
+                            .chatId(chatId)
+                            .caption(sb.toString())
+                            .photo(file)
+                            .parseMode(ParseMode.HTML)
+                            .replyMarkup(keyboardFactory.editTrackerMenu(link))
+                            .build();
+
+                    sendPhoto(sendPhoto);
+                }
+
                 Tracker tracker = trackerRepository.findFirstByChatIdAndLink(chatId, link);
                 tempTrackerValues.put(chatId, tracker);
 
@@ -378,7 +351,7 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
         }
     }
 
-    private void editMenu(long chatId, int messageId, String newText, InlineKeyboardMarkup markup) {
+    public void editMenu(long chatId, int messageId, String newText, InlineKeyboardMarkup markup) {
         EditMessageText edit = EditMessageText.builder()
                 .chatId(chatId)
                 .messageId(messageId)
@@ -402,26 +375,7 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
         }
     }
 
-    private void menuFilters(long chatId) {
-        List<SearchFilter> searchFilters = searchFilterRepository.getAllByChatId(chatId);
-        InlineKeyboardMarkup inlineKeyboardMarkup = keyboardFactory.getFiltersMenu(userPages.get(chatId), searchFilters);
-        sendMessage(SendMessage.builder()
-                .chatId(chatId)
-                .text("Список фильтров")
-                .replyMarkup(inlineKeyboardMarkup)
-                .build());
-    }
-
-    private void menuAllGoods(long chatId) {
-        InlineKeyboardMarkup inlineKeyboardMarkup = keyboardFactory.getGoodsMenu();
-        sendMessage(SendMessage.builder()
-                .chatId(chatId)
-                .text("Выберите файл")
-                .replyMarkup(inlineKeyboardMarkup)
-                .build());
-    }
-
-    private void menuTrack(long chatId) {
+    public void menuTrack(long chatId) {
         List<Tracker> trackerList = trackerRepository.findAllByChatId(chatId);
         InlineKeyboardMarkup inlineKeyboardMarkup = keyboardFactory.getTrackersMenu(userPages.get(chatId), trackerList);
         sendMessage(SendMessage.builder()
@@ -476,7 +430,7 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
                 () -> sendMessageText(chatId, "К сожалению, Ваш файл еще не сформирован"));
     }
 
-    private void answerCallback(String queryId, String text) {
+    public void answerCallback(String queryId, String text) {
         AnswerCallbackQuery answer = AnswerCallbackQuery.builder()
                 .callbackQueryId(queryId)
                 .text(text)
@@ -485,7 +439,7 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
         executeMessage(answer);
     }
 
-    private <T extends Serializable> void executeMessage(BotApiMethod<T> method) {
+    public <T extends Serializable> void executeMessage(BotApiMethod<T> method) {
         try {
             telegramClient.execute(method);
         } catch (TelegramApiException e) {
@@ -493,7 +447,7 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
         }
     }
 
-    private Optional<Message> sendMessage(SendMessage message) {
+    public Optional<Message> sendMessage(SendMessage message) {
         try {
             return Optional.ofNullable(telegramClient.execute(message));
         } catch (TelegramApiException e) {
@@ -518,4 +472,5 @@ public class TelegramBot implements LongPollingSingleThreadUpdateConsumer, Sprin
             log.error("Не удалось удалить карточку товара: {}", e.getMessage());
         }
     }
+
 }

@@ -19,7 +19,7 @@ public enum InlineButton {
     SET_FILTER_CATEGORY("Категория", "setFilterCategory"),
     SET_FILTER_PRICE("Цена","setFilterPrice"),
     SAVE_FILTER("Сохранить", "saveFilter"),
-    SAVE_EDIT_FILTER("Сохранить", "editFilter"),
+    SAVE_EDIT_FILTER("Сохранить", "saveEditFilter"),
     DELETE_FILTER("Удалить", "deleteFilter"),
     DELETE_TRACKER("Удалить", "deleteTracker"),
     PREV_PAGE("Назад", "prevPage"),
