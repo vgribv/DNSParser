@@ -43,6 +43,8 @@ import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 @Slf4j
@@ -285,7 +287,7 @@ public class ParserService {
 
                     if (!hasNextPage(document)) flag = true;
 
-                    String req = buildPriceRequest(realHtml);
+                    String req = buildPriceRequest(jsonObject);
                     String csrfToken = getToken(context.pages().getFirst());
 
                     String responseBody;
@@ -484,18 +486,32 @@ public class ParserService {
         return csrfToken;
     }
 
-    private String buildPriceRequest(String html) {
+    private String buildPriceRequest(JsonObject jsonObject) {
+        String pageHash = "";
+        String fullJsonStr = jsonObject.toString();
+
+        Pattern pattern = Pattern.compile("hash\\\\*\"\\s*:\\s*\\\\*\"([a-f0-9]{32,})");
+        Matcher matcher = pattern.matcher(fullJsonStr);
+
+        if (matcher.find()) {
+            pageHash = matcher.group(1);
+        } else {
+            log.error("КРИТИЧЕСКАЯ ОШИБКА: Hash не найден в JsonObject!");
+        }
+
+        String html = jsonObject.get("html").getAsString();
         Document doc = Jsoup.parse(html);
         Elements cards = doc.select(".catalog-product");
 
         JsonObject reqRoot = new JsonObject();
         reqRoot.addProperty("type", "product-buy");
+        reqRoot.addProperty("hash", pageHash);
         JsonArray containers = new JsonArray();
 
         for (Element card : cards) {
             String asId = card.select(".additional-voblers span").attr("id");
-
             String guid = card.attr("data-entity");
+
             if (!asId.isEmpty() && !guid.isEmpty()) {
                 JsonObject container = new JsonObject();
                 container.addProperty("id", asId);
