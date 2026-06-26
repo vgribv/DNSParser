@@ -26,6 +26,7 @@ import org.springframework.stereotype.Service;
 import ru.vgribv.parser.config.DnsParserProperties;
 import ru.vgribv.parser.dto.DiscountResultDto;
 import ru.vgribv.parser.dto.ProductHtmlDto;
+import ru.vgribv.parser.entity.ArchivedProduct;
 import ru.vgribv.parser.entity.PriceHistory;
 import ru.vgribv.parser.event.ParsingResultEvent;
 import ru.vgribv.parser.entity.Category;
@@ -43,7 +44,6 @@ import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Service
@@ -167,7 +167,6 @@ public class ParserService {
             log.info("Этап 2: Загрузка главной страницы...");
             Page page = context.pages().getFirst();
 
-            String referer = properties.getLink().getReferer();
             String prefix = properties.getLink().getPrefix();
 
             try {
@@ -185,12 +184,16 @@ public class ParserService {
             }
 
             APIRequestContext request = context.request();
+            String csrfToken = getToken(page);
+            String pageReferer = page.url();
+            String ajaxReferer = buildAjaxReferer(prefix);
 
             APIResponse responseGetCategories;
             try {
                 responseGetCategories = self.getResponse(request, properties.getLink().getProductsFilters() + "?p=1", RequestOptions.create()
                         .setHeader("X-Requested-With", "XMLHttpRequest")
-                        .setHeader("Referer", referer));
+                        .setHeader("X-CSRF-Token", csrfToken)
+                        .setHeader("Referer", pageReferer));
             } catch (RuntimeException e) {
                 log.error("🛑 КРИТИЧЕСКИЙ СБОЙ: категории не получены!");
                 throw new RuntimeException("DNS не ответил после всех попыток.");
@@ -256,7 +259,8 @@ public class ParserService {
                     try {
                         responseGetPage = self.getResponse(request, prefix + "?category=" + category.getCategoryId() + "&p=" + currentPage, RequestOptions.create()
                                 .setHeader("X-Requested-With", "XMLHttpRequest")
-                                .setHeader("Referer", referer)
+                                .setHeader("X-CSRF-Token", csrfToken)
+                                .setHeader("Referer", pageReferer)
                                 .setTimeout(30000));
                         rawText = responseGetPage.text();
                     } catch (RuntimeException e) {
@@ -288,17 +292,16 @@ public class ParserService {
                     if (!hasNextPage(document)) flag = true;
 
                     String req = buildPriceRequest(jsonObject);
-                    String csrfToken = getToken(context.pages().getFirst());
 
                     String responseBody;
 
                     showProgress(category.getName(), currentPage);
                     try {
-                        APIResponse responseGetAjax = self.getResponse(request, properties.getLink().getAjaxState() + "?p=" + currentPage, RequestOptions.create()
+                        APIResponse responseGetAjax = self.postResponse(request, properties.getLink().getAjaxState(), RequestOptions.create()
                                 .setHeader("Content-Type", "application/x-www-form-urlencoded")
-                                .setHeader("x-csrf-token", csrfToken)
-                                .setHeader("x-requested-with", "XMLHttpRequest")
-                                .setHeader("referer", referer)
+                                .setHeader("X-CSRF-Token", csrfToken)
+                                .setHeader("X-Requested-With", "XMLHttpRequest")
+                                .setHeader("Referer", ajaxReferer)
                                 .setData("data=" + req)
                                 .setTimeout(30000));
                         responseBody = responseGetAjax.text();
@@ -306,12 +309,31 @@ public class ParserService {
                         throw new RuntimeException("Парсинг дальше невозможен. Ajax выдал ошибку");
                     }
 
-                    JsonObject root = JsonParser.parseString(responseBody).getAsJsonObject();
-                    if (!root.has("data") || root.get("data").isJsonNull()) {
-                        log.warn("!!! В ответе AJAX нет поля 'data'. Тело: {}", responseBody);
-                        throw new RuntimeException("Парсинг дальше невозможен. Ajax выдал ошибку");
+                    if (responseBody == null || responseBody.isBlank() || "null".equalsIgnoreCase(responseBody.trim())) {
+                        log.warn("!!! AJAX вернул пустой/null ответ. Категория: {}, страница: {}, тело: {}", category.getName(), currentPage, responseBody);
+                        break;
                     }
-                    JsonArray states = root.getAsJsonObject("data").getAsJsonArray("states");
+
+                    JsonElement responseElement = JsonParser.parseString(responseBody);
+                    if (!responseElement.isJsonObject()) {
+                        log.warn("!!! AJAX вернул не JSON-object. Категория: {}, страница: {}, тело: {}", category.getName(), currentPage, responseBody);
+                        break;
+                    }
+
+                    JsonObject root = responseElement.getAsJsonObject();
+                    JsonElement dataElement = root.get("data");
+                    if (dataElement == null || dataElement.isJsonNull() || !dataElement.isJsonObject()) {
+                        log.warn("!!! В ответе AJAX нет объекта 'data'. Категория: {}, страница: {}, тело: {}", category.getName(), currentPage, responseBody);
+                        break;
+                    }
+
+                    JsonElement statesElement = dataElement.getAsJsonObject().get("states");
+                    if (statesElement == null || statesElement.isJsonNull() || !statesElement.isJsonArray()) {
+                        log.warn("!!! В ответе AJAX нет массива 'states'. Категория: {}, страница: {}, тело: {}", category.getName(), currentPage, responseBody);
+                        break;
+                    }
+
+                    JsonArray states = statesElement.getAsJsonArray();
 
                     for (JsonElement element : states) {
                         JsonObject item = element.getAsJsonObject();
@@ -397,13 +419,29 @@ public class ParserService {
         productRepository.flush();
         List<Product> deletedProducts = productRepository.findAllByUpdatedAtBefore(time);
         if (!deletedProducts.isEmpty()) {
-            archivedProductRepository.archiveOldProducts(time, LocalDateTime.now());
+            archivedProductRepository.saveAll(buildArchivedProducts(deletedProducts, LocalDateTime.now()));
             priceHistoryRepository.deleteHistoryForOldProducts(time);
             productRepository.deleteOldProductsInBatch(time);
         }
         log.info("📊 Итоги транзакции: сохранено/обновлено {} товаров, удалено {} товаров",
                 productsToSave.size(), deletedProducts.size());
         return deletedProducts;
+    }
+
+    private List<ArchivedProduct> buildArchivedProducts(List<Product> deletedProducts, LocalDateTime archivedAt) {
+        List<ArchivedProduct> archivedProducts = new ArrayList<>(deletedProducts.size());
+        for (Product product : deletedProducts) {
+            ArchivedProduct archivedProduct = new ArchivedProduct();
+            archivedProduct.setLinkId(product.getLinkId());
+            archivedProduct.setName(product.getName());
+            archivedProduct.setDiscountPrice(product.getDiscountPrice());
+            archivedProduct.setFullPrice(product.getFullPrice());
+            archivedProduct.setCategory(product.getCategory());
+            archivedProduct.setImageUrl(product.getImageUrl());
+            archivedProduct.setArchivedAt(archivedAt);
+            archivedProducts.add(archivedProduct);
+        }
+        return archivedProducts;
     }
 
     private List<Product> getNewProductList(List<Product> productsToSave, Map<String, Product> productMap) {
@@ -487,19 +525,8 @@ public class ParserService {
     }
 
     private String buildPriceRequest(JsonObject jsonObject) {
-        String pageHash = "";
-        String fullJsonStr = jsonObject.toString();
-
-        Pattern pattern = Pattern.compile("hash\\\\*\"\\s*:\\s*\\\\*\"([a-f0-9]{32,})");
-        Matcher matcher = pattern.matcher(fullJsonStr);
-
-        if (matcher.find()) {
-            pageHash = matcher.group(1);
-        } else {
-            log.error("КРИТИЧЕСКАЯ ОШИБКА: Hash не найден в JsonObject!");
-        }
-
         String html = jsonObject.get("html").getAsString();
+        String pageHash = extractProductBuyHash(jsonObject);
         Document doc = Jsoup.parse(html);
         Elements cards = doc.select(".catalog-product");
 
@@ -533,6 +560,59 @@ public class ParserService {
         return reqRoot.toString();
     }
 
+    private String extractProductBuyHash(JsonObject jsonObject) {
+        JsonObject assets = getJsonObject(jsonObject, "assets");
+        JsonObject inlineJs = assets != null ? getJsonObject(assets, "inlineJs") : null;
+
+        if (inlineJs != null) {
+            for (Map.Entry<String, JsonElement> entry : inlineJs.entrySet()) {
+                JsonElement value = entry.getValue();
+                if (value != null && value.isJsonPrimitive()) {
+                    String hash = extractProductBuyHashFromText(value.getAsString());
+                    if (!hash.isEmpty()) {
+                        return hash;
+                    }
+                }
+            }
+        }
+
+        JsonElement htmlElement = jsonObject.get("html");
+        if (htmlElement != null && !htmlElement.isJsonNull()) {
+            String hash = extractProductBuyHashFromText(htmlElement.getAsString());
+            if (!hash.isEmpty()) {
+                return hash;
+            }
+        }
+
+        log.error("КРИТИЧЕСКАЯ ОШИБКА: Hash для product-buy не найден в JSON ответа!");
+        return "";
+    }
+
+    private String extractProductBuyHashFromText(String text) {
+        if (text == null) {
+            return "";
+        }
+        return PRODUCT_BUY_HASH_PATTERN.matcher(text)
+                .results()
+                .map(matchResult -> matchResult.group(1))
+                .findFirst()
+                .orElse("");
+    }
+
+
+    private JsonObject getJsonObject(JsonObject jsonObject, String key) {
+        if (jsonObject == null) {
+            return null;
+        }
+
+        JsonElement element = jsonObject.get(key);
+        if (element == null || element.isJsonNull() || !element.isJsonObject()) {
+            return null;
+        }
+
+        return element.getAsJsonObject();
+    }
+
     private boolean hasNextPage(Document doc) {
         Element nextButton = doc.selectFirst(".pagination-widget__page-link_next:not(.pagination-widget__page-link_disabled)");
         return nextButton != null;
@@ -540,6 +620,10 @@ public class ParserService {
 
     private void showProgress(String categoryName, int currentPage) {
         log.info("⏳ Обработка категории: [{}] | Страница: {}", categoryName, currentPage);
+    }
+
+    private String buildAjaxReferer(String prefix) {
+        return prefix + "no-referrer";
     }
 
     private void setCity(Page page, String city) {
@@ -595,4 +679,23 @@ public class ParserService {
         }
         return response;
     }
+
+    @Retryable(
+            retryFor = {Exception.class},
+            maxAttemptsExpression = "${dns.retry.max-attempts:3}",
+            backoff = @Backoff(delayExpression = "${dns.retry.backoff-delay:1000}")
+    )
+    public APIResponse postResponse(APIRequestContext request, String url, RequestOptions requestOptions) {
+        APIResponse response = request.post(url, requestOptions);
+        if (response.status() != 200) {
+            log.warn("DNS returned {}. Triggering retry...", response.status());
+            throw new RuntimeException("DNS error: " + response.status());
+        }
+        return response;
+    }
+
+    private static final Pattern PRODUCT_BUY_HASH_PATTERN = Pattern.compile(
+            "\"type\"\\s*:\\s*\"product-buy\"\\s*,\\s*\"hash\"\\s*:\\s*\"([a-f0-9]{32,})\"",
+            Pattern.CASE_INSENSITIVE
+    );
 }
